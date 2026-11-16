@@ -1,0 +1,26 @@
+{
+  "description": "pair complete",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "pair_complete",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAP3",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "instance_name": "Home",
+      "connection_profile": {
+        "urls": [
+          {
+            "url": "http://homeassistant.local:8123",
+            "kind": "internal"
+          },
+          {
+            "url": "https://example.ui.nabu.casa",
+            "kind": "cloud"
+          }
+        ]
+      }
+    }
+  }
+}

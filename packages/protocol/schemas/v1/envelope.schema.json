@@ -31,7 +31,11 @@
         "ack",
         "ping",
         "pong",
-        "error"
+        "error",
+        "pair_request",
+        "pair_confirm",
+        "pair_complete",
+        "pair_abort"
       ]
     },
     "id": {
@@ -244,6 +248,70 @@
         "properties": {
           "body": {
             "$ref": "error.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "pair_request"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "pair_request.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "pair_confirm"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "pair_confirm.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "pair_complete"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "pair_complete.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "pair_abort"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "pair_abort.schema.json"
           }
         }
       }

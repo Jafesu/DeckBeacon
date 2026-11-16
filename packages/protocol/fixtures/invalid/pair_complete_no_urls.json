@@ -1,0 +1,18 @@
+{
+  "description": "at least one URL",
+  "schema": "envelope",
+  "error_path": "/body/connection_profile/urls",
+  "message": {
+    "v": 1,
+    "type": "pair_complete",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAP6",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "instance_name": "Home",
+      "connection_profile": {
+        "urls": []
+      }
+    }
+  }
+}

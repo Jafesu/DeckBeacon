@@ -1,0 +1,15 @@
+{
+  "description": "closed reason set",
+  "schema": "envelope",
+  "error_path": "/body/reason",
+  "message": {
+    "v": 1,
+    "type": "pair_abort",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAP8",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "reason": "because"
+    }
+  }
+}

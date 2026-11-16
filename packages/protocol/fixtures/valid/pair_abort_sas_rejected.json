@@ -1,0 +1,14 @@
+{
+  "description": "pair abort sas rejected",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "pair_abort",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAP4",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "reason": "sas_rejected"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "description": "only http(s)/ws(s) URLs",
+  "schema": "envelope",
+  "error_path": "/body/connection_profile/urls/0/url",
+  "message": {
+    "v": 1,
+    "type": "pair_complete",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAP5",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "instance_name": "Home",
+      "connection_profile": {
+        "urls": [
+          {
+            "url": "javascript:alert(1)",
+            "kind": "internal"
+          }
+        ]
+      }
+    }
+  }
+}

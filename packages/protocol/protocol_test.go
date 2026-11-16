@@ -42,7 +42,7 @@ func loadFixtures(t *testing.T, kind string) map[string]fixture {
 
 func TestAllSchemasCompile(t *testing.T) {
 	for _, name := range []string{"envelope", "common", "hello", "welcome", "capabilities", "telemetry", "event",
-		"command", "command_result", "notification", "notification_status", "ack", "ping", "error"} {
+		"command", "command_result", "notification", "notification_status", "ack", "ping", "error", "pair_request", "pair_confirm", "pair_complete", "pair_abort"} {
 		if _, err := Schema(name); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}
