@@ -71,11 +71,49 @@ jobs:
       - run: pytest -q
 
   fixtures:
-    name: Fixture structure
+    name: Fixtures, vendored schemas, security greps
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - run: python3 scripts/check_fixtures.py packages/protocol/fixtures
+      - run: python3 scripts/sync_schemas.py --check
+      - name: no HA access tokens in the agent (M2-AC3, ADR-0002)
+        run: |
+          if grep -rniE 'access_token|long[_ -]?lived|authorization|bearer' apps/agent --include=*.go; then
+            echo "agent code must never handle Home Assistant tokens"; exit 1
+          fi
+
+  homeassistant:
+    name: HA integration + E2E (${{ matrix.ha }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - ha: "minimum 2026.5"
+            phcc: "pytest-homeassistant-custom-component==0.13.330"
+          - ha: "latest"
+            phcc: "pytest-homeassistant-custom-component"
+    defaults:
+      run:
+        working-directory: apps/homeassistant
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: apps/agent/go.sum
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+      - name: build agent for E2E
+        run: |
+          (cd ../agent && CGO_ENABLED=0 go build -o "$RUNNER_TEMP/deckbeacon" ./cmd/deckbeacon)
+          echo "DECKBEACON_AGENT_BIN=$RUNNER_TEMP/deckbeacon" >> "$GITHUB_ENV"
+      - run: pip install "${{ matrix.phcc }}" jsonschema==4.26.0 ruff==0.17.5 pytest-timeout
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest -q --timeout 300
 
   secrets:
     name: Secret scan

@@ -8,14 +8,13 @@ import pytest
 from aiohttp import WSMsgType
 from homeassistant.const import STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.deckbeacon import noise
 from custom_components.deckbeacon.const import DOMAIN, EVENT_DEVICE
 
 from .agent_sim import SimAgent
-from .helpers import pair
+from .helpers import get_device, pair
 
 METRICS = [
     {"key": "cpu.usage", "value": 23.5, "unit": "%"},
@@ -56,7 +55,7 @@ async def test_telemetry_creates_entities_and_staleness(hass: HomeAssistant, cli
     await agent.telemetry(METRICS)
     await settle(hass)
 
-    dev = dr.async_get(hass).async_get_device_by_identifier((DOMAIN, agent.device_id), entry.entry_id)
+    dev = get_device(hass, entry.entry_id)
     assert dev is not None and dev.model == "Steam Deck OLED" and dev.manufacturer == "Valve"
 
     assert hass.states.get(ent(hass, agent.device_id, "cpu_usage")).state == "23.5"

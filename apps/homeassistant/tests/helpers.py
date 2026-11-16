@@ -61,3 +61,12 @@ async def pair(hass: HomeAssistant, client, agent: SimAgent) -> ConfigEntry:
     await agent.close()
     await hass.async_block_till_done()
     return result["result"]
+
+
+def get_device(hass: HomeAssistant, entry_id: str):
+    """Device for a config entry (API stable across HA 2026.5 … latest)."""
+    from homeassistant.helpers import device_registry as dr
+
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry_id)
+    assert len(devices) == 1, devices
+    return devices[0]
