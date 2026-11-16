@@ -11,7 +11,7 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 
 **Runtime default** uses the spec's runtime vocabulary (`available` / `unsupported` / `disabled` / `unavailable` / `unknown`). It says what the agent will report when the capability is implemented and its validation passes. Until then, everything reports `unknown`.
 
-**Tested hardware: none yet.** All SteamOS rows are pending the [hardware validation plan](hardware-validation-plan.md).
+**Tested hardware: none yet.** M2 adds collector implementations exercised against *synthetic* trees (Steam Deck OLED, Dell G15). These are code tests, not hardware evidence, so the rows below stay `research`. All SteamOS rows are pending the [hardware validation plan](hardware-validation-plan.md).
 
 **Tier 1 targets (D5):** Steam Deck LCD, Steam Deck OLED, and genuine SteamOS on non-Valve x86_64 hardware (reference unit: Dell G15, Intel/AMD CPU + NVIDIA GPU). Providers are chosen by runtime detection. "Device-dep." rows must list a result per reference unit.
 
@@ -19,7 +19,7 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 
 | Capability | Chosen source | Privilege | Needs Decky | Research status | Runtime default | Validation |
 |---|---|---|---|---|---|---|
-| Device-key-authenticated WS into HA (LAN) | Custom `HomeAssistantView` WebSocket (ADR-0001) | none on device | no | **verified** (local HA 2026.2.3 spike) | available | Spike T1–T4; re-test on HA 2026.11 in M2 |
+| Device-key-authenticated WS into HA (LAN) | Custom `HomeAssistantView` WebSocket + Noise IK (ADR-0001/0002) | none on device | no | **verified** (M2: Go agent ↔ integration E2E on HA 2026.5.1 and 2026.10.4; container, not SteamOS) | available | M2 AC1–AC9 |
 | Same endpoint via HA Cloud remote URL | Nabu Casa remote UI → HA aiohttp app | none | no | **verified** (HV-R1, HA 2026.11.1, 15 min soak, p50 92 ms) | available | [HV-R1](evidence/HV-R1-2026-11-16.md); multi-hour soak from device in M5 |
 | Same endpoint via user's external HTTPS/WSS URL | Reverse proxy → HA | none | no | source (standard HTTP) | available | HV-R2 |
 | HA restricted token on device | — | — | — | **unsupported** (does not exist) | n/a | — |

@@ -27,3 +27,7 @@ Status: Accepted (approved by project owner 2026-11-16; see docs/research/M0-dec
 
 ## Validation
 M1: protocol fixtures and test vectors. M2: pairing integration tests, a replay test, a revocation test, and a MITM test (a proxy swaps keys, so the SAS mismatches and pairing aborts).
+
+## Amendment (M2, 2026-11-16)
+- The integration uses **one static key per HA installation** (private HA storage), not one per config entry: in Noise IK the responder must use its static key before knowing which device connects. Device keys stay per install; revocation stays per entry.
+- Implemented and verified in M2 (`docs/milestones/M2-plan.md` §Results, AC1–AC3, AC8).

@@ -37,7 +37,7 @@ Status: M1 baseline (2026-11-16). Re-reviewed at every milestone that adds an in
 ## 3. Threats (STRIDE per spec-10 actor) and mitigations
 | # | Actor / threat | Boundary | Mitigations | Verified by |
 |---|---|---|---|---|
-| T1 | **Malicious LAN peer** sniffs or tampers with traffic to `http://` HA | B1 | Noise IK end to end with pinned static keys. TLS is not relied on. | M2 MITM test |
+| T1 | **Malicious LAN peer** sniffs or tampers with traffic to `http://` HA | B1 | Noise IK end to end with pinned static keys. TLS is not relied on. | M2: wrong-key, tamper, and replay tests (Go+Py) |
 | T2 | **Spoofed HA discovery** (fake `_home-assistant._tcp`) | B1 | Discovery only proposes a URL. Pairing requires SAS confirmation on both sides. After pairing, a server key mismatch → hard fail plus a "re-pair required" state, never silent re-trust. | M2 test: wrong server key |
 | T3 | **Pairing spam / rogue enrolment** from LAN or internet | B1 | `/pair` returns 404 unless a ≤10-minute window was opened in the HA UI. One pending request per window. SAS confirmed by a human on both sides. Rate limit plus HA ban integration. | M2 tests |
 | T4 | **Pre-auth DoS / parser bugs** via the internet-exposed endpoint | B1 | Handshake-only state machine before auth. 64 KiB frame cap. 5 s auth deadline. Per-IP and global connection caps. `process_wrong_login` on failures. Handshake fuzzing in CI. | M2 fuzz + limits tests |
@@ -62,9 +62,9 @@ Status: M1 baseline (2026-11-16). Re-reviewed at every milestone that adds an in
 - Nabu Casa infrastructure compromise: it carries TLS to HA. The Noise layer keeps device traffic confidential even there.
 
 ## 5. Security requirements checklist (enforced per milestone)
-- [ ] No HA access tokens on the device (any milestone): a grep-based CI check is added in M2.
-- [ ] Every inbound message is schema-validated before use (M2).
-- [ ] Secrets never logged: a redaction test with canary values (M2).
+- [x] No HA access tokens on the device: CI grep over agent sources plus E2E scan of agent state (M2).
+- [x] Every inbound message is schema-validated before use, on both sides (M2).
+- [x] Diagnostics canary test (M2). Agent logs contain no key material by construction (keys are never formatted). A log-capture canary test is still to add.
 - [x] Closed command set with typed args (M1 schemas plus fixtures).
 - [x] Notification actions cannot carry service calls (M1 schema plus fixture).
 - [x] Secret scanning in CI (M1).
