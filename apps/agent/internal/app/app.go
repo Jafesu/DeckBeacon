@@ -1,0 +1,243 @@
+// Package app wires the agent's commands (run, pair, status, unpair).
+package app
+
+import (
+	"bufio"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/jafesu/deckbeacon/apps/agent/internal/buildinfo"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/collect"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/discovery"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/dispatch"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/fsutil"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/identity"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/pairing"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/paths"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/session"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/store"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/trust"
+)
+
+// Env carries process-level dependencies.
+type Env struct {
+	Dirs   paths.Dirs
+	Host   collect.Env
+	Stdin  io.Reader
+	Stdout io.Writer
+	Log    *slog.Logger
+}
+
+func goarchToProtocol() string {
+	if runtime.GOARCH == "arm64" {
+		return "aarch64"
+	}
+	return "x86_64"
+}
+
+func deviceInfo(h collect.Env, osr collect.OSRelease) map[string]any {
+	os := map[string]any{"id": osr["ID"], "version_id": osr["VERSION_ID"]}
+	for k, v := range map[string]string{"build_id": osr["BUILD_ID"], "variant_id": osr["VARIANT_ID"]} {
+		if v != "" {
+			os[k] = v
+		}
+	}
+	info := collect.ReadDeviceInfo(h)
+	dev := map[string]any{"os": os, "arch": goarchToProtocol(), "model": info.Model}
+	if info.Vendor != "" {
+		dev["vendor"] = info.Vendor
+	}
+	return dev
+}
+
+func bootID(h collect.Env) string {
+	if b, err := os.ReadFile(filepath.Join(h.Root, "proc/sys/kernel/random/boot_id")); err == nil {
+		id := strings.ReplaceAll(strings.TrimSpace(string(b)), "-", "")
+		if len(id) == 32 {
+			return strings.ToLower(id)
+		}
+	}
+	st, _ := os.ReadFile(filepath.Join(h.Root, "proc/stat"))
+	sum := sha256.Sum256(st)
+	return hex.EncodeToString(sum[:16])
+}
+
+// Pair performs interactive pairing and saves trust.
+func Pair(ctx context.Context, e Env, baseURL, name string) error {
+	osr, err := collect.RequireSteamOS(e.Host)
+	if err != nil {
+		return err
+	}
+	if err := e.Dirs.Ensure(); err != nil {
+		return err
+	}
+	id, err := identity.LoadOrCreate(e.Dirs.State)
+	if err != nil {
+		return err
+	}
+	if baseURL == "" {
+		fmt.Fprintln(e.Stdout, "Looking for Home Assistant on the local network…")
+		found, err := discovery.Browse(ctx, discovery.MulticastAddr, 3*time.Second)
+		if err != nil || len(found) == 0 {
+			return errors.New("no Home Assistant found via mDNS; pass --url http://<home-assistant>:8123")
+		}
+		if len(found) > 1 {
+			for _, f := range found {
+				fmt.Fprintf(e.Stdout, "  %s  %s\n", f.Name, f.URL)
+			}
+			return errors.New("several Home Assistant instances found; choose one with --url")
+		}
+		baseURL = found[0].URL
+		fmt.Fprintf(e.Stdout, "Found %s at %s\n", found[0].Name, baseURL)
+	}
+	if name == "" {
+		name, _ = os.Hostname()
+		if name == "" {
+			name = "SteamOS device"
+		}
+	}
+	dev := deviceInfo(e.Host, osr)
+	dev["device_id"] = id.DeviceID
+	reader := bufio.NewReader(e.Stdin)
+	confirm := func(ctx context.Context, sas string) (bool, error) {
+		fmt.Fprintf(e.Stdout, "\nPairing code: %s %s\nCheck that Home Assistant shows the same code, then confirm it there too.\nDoes Home Assistant show this code? [y/N]: ", sas[:3], sas[3:])
+		line, err := reader.ReadString('\n')
+		if err != nil && line == "" {
+			return false, err
+		}
+		ans := strings.ToLower(strings.TrimSpace(line))
+		return ans == "y" || ans == "yes", nil
+	}
+	tr, err := pairing.Pair(ctx, baseURL, id, pairing.Request{
+		AgentVersion: semver(buildinfo.Version), Protocol: map[string]int{"min": 1, "max": 1}, Device: dev, Name: name,
+	}, confirm)
+	if err != nil {
+		return err
+	}
+	if err := trust.Save(e.Dirs.State, tr); err != nil {
+		return err
+	}
+	fmt.Fprintf(e.Stdout, "Paired with %q. Device ID: %s\nStart the agent with: systemctl --user enable --now deckbeacon.service\n", tr.InstanceName, id.DeviceID)
+	return nil
+}
+
+func semver(v string) string {
+	if strings.Count(v, ".") >= 2 {
+		return v
+	}
+	return "0.0.0-dev"
+}
+
+// Run is the long-running service.
+func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
+	osr, err := collect.RequireSteamOS(e.Host)
+	if err != nil {
+		return err
+	}
+	if err := e.Dirs.Ensure(); err != nil {
+		return err
+	}
+	id, err := identity.LoadOrCreate(e.Dirs.State)
+	if err != nil {
+		return err
+	}
+	st, err := store.Open(filepath.Join(e.Dirs.State, "store.db"), 1000)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	sys := collect.NewSystem(e.Host)
+	writeStatus := func(s session.Status) {
+		b, _ := json.MarshalIndent(s, "", "  ")
+		_ = fsutil.WriteFileAtomic(filepath.Join(e.Dirs.Runtime, "status.json"), b, 0o600)
+	}
+	for {
+		tr, err := trust.Load(e.Dirs.State)
+		switch {
+		case errors.Is(err, trust.ErrNotPaired):
+			writeStatus(session.Status{State: "unpaired", Since: time.Now().UTC()})
+			e.Log.Info("not paired; run `deckbeacon pair`", "device_id", id.DeviceID)
+		case err != nil:
+			return err
+		case tr.Revoked:
+			writeStatus(session.Status{State: "revoked", Since: time.Now().UTC(), LastError: session.ErrRevoked.Error()})
+		default:
+			cli, err := session.New(session.Config{
+				Identity: id, Trust: tr, Store: st, Collector: sys, Dispatcher: dispatch.New(st, time.Now),
+				Hello:             session.HelloInfo{AgentVersion: semver(buildinfo.Version), Device: deviceInfo(e.Host, osr), BootID: bootID(e.Host), Mode: func() string { m, _ := sys.SessionMode(); return m }},
+				TelemetryInterval: telemetryInterval, Log: e.Log, OnStatus: writeStatus,
+			})
+			if err != nil {
+				return err
+			}
+			err = cli.Run(ctx)
+			if errors.Is(err, session.ErrRevoked) {
+				tr.Revoked = true
+				_ = trust.Save(e.Dirs.State, tr)
+				e.Log.Warn("device revoked by Home Assistant; idle until re-paired")
+				continue
+			}
+			return err
+		}
+		// Unpaired or revoked: wait for a (re-)pairing without hammering anything.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
+
+// Status prints identity, pairing and connection state.
+func Status(e Env, asJSON bool) error {
+	out := map[string]any{"agent": buildinfo.Get().String()}
+	if id, err := identity.LoadOrCreate(e.Dirs.State); err == nil {
+		out["device_id"] = id.DeviceID
+	}
+	if tr, err := trust.Load(e.Dirs.State); err == nil {
+		out["paired_with"] = tr.InstanceName
+		out["revoked"] = tr.Revoked
+		var kinds []string
+		for _, u := range tr.URLs {
+			kinds = append(kinds, u.Kind)
+		}
+		out["url_kinds"] = kinds
+	} else {
+		out["paired_with"] = nil
+	}
+	if b, err := os.ReadFile(filepath.Join(e.Dirs.Runtime, "status.json")); err == nil {
+		var s session.Status
+		if json.Unmarshal(b, &s) == nil {
+			out["connection"] = s
+		}
+	}
+	if asJSON {
+		return json.NewEncoder(e.Stdout).Encode(out)
+	}
+	for _, k := range []string{"agent", "device_id", "paired_with", "revoked", "url_kinds", "connection"} {
+		if v, ok := out[k]; ok {
+			fmt.Fprintf(e.Stdout, "%-12s %v\n", k+":", v)
+		}
+	}
+	return nil
+}
+
+// Unpair removes local trust. The device should also be deleted in HA.
+func Unpair(e Env) error {
+	if err := trust.Remove(e.Dirs.State); err != nil {
+		return err
+	}
+	fmt.Fprintln(e.Stdout, "Local pairing removed. Also delete this device in Home Assistant (Settings → Devices & services → DeckBeacon).")
+	return nil
+}

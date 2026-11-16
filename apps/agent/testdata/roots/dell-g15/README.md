@@ -1,0 +1,1 @@
+SYNTHETIC tree modelled on a Dell G15 laptop (Intel CPU + NVIDIA GPU) running SteamOS, the project's reference non-Valve unit. NVIDIA values come from the fake nvidia-smi in tests. Replace with a real capture (HV-T7).
