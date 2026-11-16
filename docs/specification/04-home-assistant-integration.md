@@ -1,0 +1,6 @@
+# Home Assistant integration
+Python custom integration supporting Zeroconf discovery, manual host/URL, secure config flow, device approval, reauth/reconfigure, options and repairs. Stable device registry identifier and entity unique IDs. Multiple SteamOS devices.
+
+Native platforms: sensor, binary_sensor, button, switch, number, select, update, event, notify where appropriate and verified. Default sensors: connection mode, last seen, CPU/GPU/RAM, temperatures, storage, battery, current game/App ID, session duration, download status/progress/speed/ETA, game counts, update counts. Do not create one entity per installed game. Mark stale values unavailable or show last-seen separately, never present cached metrics as current.
+
+Actions: launch_game, close_game, pause_downloads, resume_downloads, install_game, update_game, move_game, uninstall_game, set_compatibility_tool, refresh_library, list_games, get_game, send_notification, dismiss_notification, get_notification_status. Register actions only as supported by integration contract; runtime enforce per-device capabilities and permissions, structured errors. HA device triggers for gaming, power, connection and download events. Provide repair issues for auth/transport incompatibility. HA restart must not require re-pairing.

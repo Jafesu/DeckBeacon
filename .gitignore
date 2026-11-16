@@ -1,0 +1,9 @@
+# build / tooling
+/bin/
+/dist/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+coverage/

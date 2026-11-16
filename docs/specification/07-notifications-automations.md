@@ -1,0 +1,6 @@
+# Notifications and automation
+Bidirectional notification envelope: notification_id, device_id, title, message, optional safe icon, priority, category, expires_at, tag, actions, require_ack, source. States: accepted, delivered, displayed (only when observable), dismissed, actioned, expired, failed. HA notify entity for basic messages and send_notification action for rich payload. Local quiet hours, game-aware DND, category filters, privacy preview and bounded queue.
+
+Interactive action: Decky/agent -> authenticated response -> HA validates notification/action/expiry and emits response event. Never execute arbitrary HA service supplied by notification payload. Sensitive smart-home commands require HA-side authorization/confirmation. Responses idempotent and replay protected.
+
+Events: game_started/stopped, session_started/ended, download_started/completed, update_available, battery_low, docked/undocked, connection_changed, device_resumed, agent_update_available, notification_action, storage_low. Event IDs, sequence, timestamps, live vs backfill flag, device ID and version. Dedupe on reconnect; old events should not unexpectedly run time-sensitive automations. Example: Satisfactory starts -> gaming lighting scene.

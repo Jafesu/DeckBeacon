@@ -1,0 +1,15 @@
+== T1 enrolled device key
+auth result: auth_ok
+received command: cmd-1 ping
+replay response: {"command_id":"cmd-1","type":"duplicate"}
+== T2 unenrolled key (expect rejection, exit 3)
+auth result: auth_invalid
+exit=3
+== T3 HA REST API without token (expect 401)
+401
+== T4 HA websocket API is NOT reachable with device key (device holds no HA token)
+no device challenge; server sent: auth_required
+exit=4
+2026-11-16 16:42:09.801 WARNING (MainThread) [custom_components.deckbeacon_spike] deckbeacon_spike: state <state sensor.deckbeacon_spike_deck_test_1_cpu=42.5; seq=1, unit_of_measurement=% @ 2026-11-16T16:42:09.801805+00:00>
+2026-11-16 16:42:09.803 WARNING (MainThread) [custom_components.deckbeacon_spike] deckbeacon_spike: command ack cmd-1 accepted
+2026-11-16 16:42:09.810 WARNING (MainThread) [custom_components.deckbeacon_spike] deckbeacon_spike: rejected device auth

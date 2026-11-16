@@ -1,0 +1,4 @@
+# Installation and onboarding
+SteamOS-only checks; guided desktop installer and terminal CLI (install, repair, upgrade, status, uninstall). Install persistent user files without mutating immutable root. User-session service by default; optional boot helper needs explicit consent and validated platform-specific instructions. Idempotent install/repair, uninstall with preserve/delete-data choice. Versioned verified release artifacts; no unverified curl|bash as primary method.
+
+Onboarding: install agent -> discover HA or enter URL -> verify identity and approve pairing -> choose monitoring/remote permissions -> test local and remote transport -> register entities -> optionally install Decky/dashboard. Pairing works without Decky through local UI. HA integration via HACS/manual; dashboard separately via frontend distribution; Decky through supported loader mechanism. Network changes and HA restart do not require re-pairing. Secure backup/restore and reset documented.
