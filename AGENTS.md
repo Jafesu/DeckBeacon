@@ -6,6 +6,6 @@ Read docs/specification/00-product-overview.md and all relevant specifications b
 - **Decisions:** accepted ADRs in `docs/adr` are binding alongside the specification. If they conflict, the ADR wins (it records an approved change). Owner decisions: `docs/research/M0-decisions.md`.
 - **Protocol changes:** follow `packages/protocol/COMPATIBILITY.md`. Every schema change ships with valid and invalid fixtures, and both the Go and Python suites must pass.
 - **Hardware truth:** capability claims live in `docs/research/capability-matrix.md`. A row only moves forward with evidence in `docs/research/evidence/` (device, SteamOS build, Steam build, date). Tier 1 includes non-Valve SteamOS hardware (reference: Dell G15), so never key behaviour on Valve board names.
-- **Toolchains:** Go 1.24 (`CGO_ENABLED=0`, linux/amd64 and arm64). Python 3.13+ with `ruff` and `pytest`. Minimum Home Assistant 2026.5.
+- **Toolchains:** Go 1.26 (`CGO_ENABLED=0`, linux/amd64 and arm64). Python 3.13+ with `ruff` and `pytest`. Minimum Home Assistant 2026.5.
 - **Security gates:** no HA access tokens on the device. Steam credential files are never copied or logged (allowlisted parser only). All inbound messages are schema-validated. See `docs/security/threat-model.md`.
 - **Milestones:** plan, acceptance criteria, and results in `docs/milestones/M<n>-plan.md`. A milestone is complete only when its results section records reproducible evidence and known limitations.

@@ -36,7 +36,7 @@ Repository structure, engineering rules, CI, the wire-protocol contract (schemas
 - Release signing and the mirror-repo publishing workflow → M9/M10.
 
 ## Results (2026-11-16, local; CI pending first GitHub run)
-Environment: Linux x86_64 container, Go 1.24.7, Python 3.13.18, jsonschema 4.26.0, santhosh-tekuri/jsonschema v6.0.2.
+Environment: Linux x86_64 container, Go 1.26.11, Python 3.13.18, jsonschema 4.26.0, santhosh-tekuri/jsonschema v6.0.3.
 
 | AC | Result | Evidence |
 |---|---|---|
@@ -50,6 +50,8 @@ Environment: Linux x86_64 container, Go 1.24.7, Python 3.13.18, jsonschema 4.26.
 
 ### Findings during M1
 - **JSON integer precision** (found during HV-R1 measurement): an int64 nanosecond value sent as a JSON number was altered by a float64 decode. Protocol now caps all counters at 2^53−1 (`common#/$defs/counter`). Rule added to `COMPATIBILITY.md`. Fixture `envelope_seq_beyond_2_53` added.
+
+- **Toolchain** (found by CI govulncheck, run #1): Go 1.24 is out of support, and two standard-library `net/url` vulnerabilities (GO-2026-6218, GO-2026-4601) were reachable via schema `$ref` resolution. Moved to Go 1.26, santhosh-tekuri/jsonschema v6.0.3, and `golang.org/x/text` v0.43.0. Bumped Actions to Node-24 majors.
 
 ### Known limitations
 - Protocol fixtures are hand-authored. Message *semantics* (ordering, dedupe, TTL) are specified in `COMPATIBILITY.md` but enforced only from M2, when agent and integration code exist.
