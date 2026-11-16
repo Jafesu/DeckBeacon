@@ -9,9 +9,7 @@ import pytest
 
 from custom_components.deckbeacon import noise
 
-VECTORS = json.loads(
-    (Path(__file__).resolve().parents[3] / "packages" / "protocol" / "vectors" / "noise.json").read_text()
-)
+VECTORS = json.loads((Path(__file__).resolve().parents[3] / "packages" / "protocol" / "vectors" / "noise.json").read_text())
 
 
 def _h(x: str) -> bytes:

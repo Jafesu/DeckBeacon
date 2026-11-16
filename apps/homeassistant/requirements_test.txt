@@ -1,0 +1,3 @@
+# Latest supported HA (test harness pins homeassistant)
+pytest-homeassistant-custom-component
+jsonschema==4.26.0

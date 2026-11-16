@@ -1,0 +1,57 @@
+{
+  "config": {
+    "step": {
+      "confirm_code": {
+        "title": "Confirm pairing code",
+        "description": "**{name}** ({model}) wants to pair.\n\nCode: **{code}**\n\nCheck that the device shows exactly this code. Accept only if it matches; then also confirm on the device.",
+        "menu_options": {
+          "accept": "The code matches: pair",
+          "reject": "The code does not match: cancel"
+        }
+      }
+    },
+    "progress": {
+      "wait_for_device": "Pairing window open for 10 minutes. On your SteamOS device run:\n\n`{command}`",
+      "wait_for_device_confirm": "Now confirm the same code on the device."
+    },
+    "abort": {
+      "already_configured": "This device is already paired.",
+      "code_rejected": "Pairing cancelled: the code did not match.",
+      "device_rejected": "Pairing cancelled on the device.",
+      "timeout": "The pairing window expired. Start again.",
+      "window_closed": "Pairing was interrupted. Start again.",
+      "already_paired": "This device is already paired."
+    }
+  },
+  "issues": {
+    "possible_clone": {
+      "title": "{name}: possible cloned device identity",
+      "description": "Two sessions with the same device identity keep replacing each other. If you restored a backup of this device onto another machine, remove one of them and pair it again."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "connection": {"name": "Connection", "state": {"local": "Local", "remote": "Remote", "offline": "Offline"}},
+      "last_seen": {"name": "Last seen"},
+      "cpu_usage": {"name": "CPU usage"},
+      "memory_used": {"name": "Memory used"},
+      "memory_total": {"name": "Memory total"},
+      "storage_home_used": {"name": "Internal storage used"},
+      "storage_home_free": {"name": "Internal storage free"},
+      "storage_sd_used": {"name": "SD card used"},
+      "storage_sd_free": {"name": "SD card free"},
+      "boot_time": {"name": "Last boot"},
+      "battery_power": {"name": "Battery power"},
+      "battery_status": {"name": "Battery status", "state": {"charging": "Charging", "discharging": "Discharging", "full": "Full", "not_charging": "Not charging", "unknown": "Unknown"}},
+      "cpu_temp": {"name": "CPU temperature"},
+      "gpu_temp": {"name": "GPU temperature"},
+      "fan": {"name": "Fan speed"},
+      "gpu_busy": {"name": "GPU usage"},
+      "session_mode": {"name": "Session mode", "state": {"gaming": "Gaming", "desktop": "Desktop", "none": "None", "unknown": "Unknown"}}
+    },
+    "binary_sensor": {
+      "connected": {"name": "Connected"},
+      "ac_power": {"name": "AC power"}
+    }
+  }
+}
