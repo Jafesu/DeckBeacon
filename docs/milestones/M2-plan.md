@@ -53,7 +53,7 @@ Environment: Linux x86_64 container; Go 1.26.11; Python 3.14.10; HA test harness
 | AC8 revocation | **pass** | Deleting the entry: live session closed, reconnect refused with `permission_denied`, agent persists `revoked` and idles (no crash loop). E2E verified with the real binary. |
 | AC9 pre-auth limits | **pass** | Garbage handshake, 70 kB frame, and text frame closed. Device still connects afterwards. Per-IP/global pre-auth caps and `process_wrong_login` on failures. |
 | AC10 diagnostics | **pass** | Canary test: neither side's keys appear in diagnostics. |
-| AC11 CI | see run below | Jobs: go, protocol-python, fixtures (+schema sync, token grep), homeassistant ×2 (min/latest + E2E), secrets. |
+| AC11 CI | **pass** | [Run #9](https://github.com/Jafesu/DeckBeacon/actions/runs/43929314134): all 6 jobs green: go (incl. govulncheck), protocol-python, fixtures (+schema sync, token grep), HA integration + E2E on **2026.5.1** and **latest**, secret scan. |
 
 Test counts (local): Go: all 14 packages pass with `-race`. Python protocol: 54. HA integration + E2E: **27 passed on HA 2026.5.1 and 27 passed on HA 2026.10.4**.
 
