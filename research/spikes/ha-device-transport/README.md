@@ -40,3 +40,6 @@ for f in __init__.py config_flow.py manifest.json; do \
   wget -q "https://raw.githubusercontent.com/Jafesu/DeckBeacon/claude/jolly-mendel-9ig3mz/research/spikes/ha-device-transport/custom_components/deckbeacon_spike/$f"; done && ls
 ```
 Then restart HA. Removal: delete the config entry, run `rm -rf /config/custom_components/deckbeacon_spike`, and restart.
+
+## HV-R1 result (2026-11-16)
+PASS through HA Cloud against HA 2026.11.1. See `docs/research/evidence/HV-R1-2026-11-16.md`.

@@ -2,7 +2,7 @@
 Project: DeckBeacon. Monorepo; planning complete, implementation only when explicitly authorized. Read AGENTS.md and docs/specification/ in numeric order. Start with milestone 0 research and produce a feasibility report before building production features. Propose architecture decision records for unresolved issues. Implement one milestone at a time with tests and acceptance evidence. Do not fabricate Steam APIs, HA Cloud transport support, Decky interfaces, or hardware telemetry. Never silently broaden permissions or use unrestricted HA tokens. Keep agent Go, HA integration Python, Decky and dashboard TypeScript/React as appropriate.
 
 ## Working notes (added M1, 2026-11-16)
-- Status: M0 approved (ADRs 0001–0006 accepted). M1 (monorepo foundation) in progress. See `docs/milestones/`.
+- Status: M0 approved (ADRs 0001–0006 accepted). M1 (monorepo foundation) complete, awaiting review. HV-R1 (HA Cloud) passed. See `docs/milestones/`.
 - Local checks before committing:
   - `gofmt -l apps/agent packages/protocol`
   - `go vet ./apps/agent/... ./packages/protocol/...`

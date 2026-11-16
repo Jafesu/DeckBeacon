@@ -1,6 +1,6 @@
 # Milestone 1 — Monorepo Foundation: Plan, Acceptance Criteria, Results
 
-Status: **In progress** (started 2026-11-16 after M0 approval)
+Status: **Complete — awaiting owner review** (2026-11-16). CI green on run #2.
 
 ## Scope (roadmap item 1)
 Repository structure, engineering rules, CI, the wire-protocol contract (schemas, compatibility rules, examples, cross-language fixtures), threat model, and ADR upkeep. **No product behaviour.** The agent and integration are buildable skeletons only. Telemetry, pairing, and entities are M2.
@@ -35,7 +35,7 @@ Repository structure, engineering rules, CI, the wire-protocol contract (schemas
 - Decky (M4) and dashboard (M8) toolchains. Placeholder READMEs only.
 - Release signing and the mirror-repo publishing workflow → M9/M10.
 
-## Results (2026-11-16, local; CI pending first GitHub run)
+## Results (2026-11-16)
 Environment: Linux x86_64 container, Go 1.26.11, Python 3.13.18, jsonschema 4.26.0, santhosh-tekuri/jsonschema v6.0.3.
 
 | AC | Result | Evidence |
@@ -44,7 +44,7 @@ Environment: Linux x86_64 container, Go 1.26.11, Python 3.13.18, jsonschema 4.26
 | AC2 Python tests, lint | **pass** | `ruff check`, `ruff format --check` clean. `pytest`: 46 passed (1 schema meta-check + 20 valid + 25 invalid). |
 | AC3 cross-language fixtures | **pass** | 20 valid / 25 invalid. Each invalid fixture fails at exactly its pinned `error_path` in **both** Go and Python. `scripts/check_fixtures.py`: 0 problems. |
 | AC4 cross-build | **pass** | `deckbeacon` builds for linux/amd64 (ELF x86-64) and linux/arm64 (ELF aarch64), `CGO_ENABLED=0`. |
-| AC5 CI workflow | **written, pending first run** | `.github/workflows/ci.yml` (jobs: go, protocol-python, fixtures, secrets). YAML parsed locally. `actionlint` could not be run in this sandbox. |
+| AC5 CI workflow | **pass** | `.github/workflows/ci.yml` (jobs: go, protocol-python, fixtures, secrets). Run #1 failed on govulncheck (real finding, below). [Run #2](https://github.com/Jafesu/DeckBeacon/actions/runs/43921535416): all 4 jobs green. |
 | AC6 threat model | **pass** | `docs/security/threat-model.md`: T1–T17 cover every spec-10 actor and M0 R1–R12. |
 | AC7 no secrets | **pass (local)** | Grep scan for private keys, tokens, JWTs, HA Cloud hostnames, and private IPs: none. Test keys for HV-R1 were kept outside the repo. gitleaks runs in CI. |
 
@@ -55,4 +55,5 @@ Environment: Linux x86_64 container, Go 1.26.11, Python 3.13.18, jsonschema 4.26
 
 ### Known limitations
 - Protocol fixtures are hand-authored. Message *semantics* (ordering, dedupe, TTL) are specified in `COMPATIBILITY.md` but enforced only from M2, when agent and integration code exist.
-- CI has not yet executed on GitHub. AC5 is marked complete after the first green run.
+- `actionlint` could not run in the development sandbox. The workflow is validated by GitHub executing it.
+- Runtime semantics are untested until M2 code exists (see above).

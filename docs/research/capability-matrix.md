@@ -20,7 +20,7 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 | Capability | Chosen source | Privilege | Needs Decky | Research status | Runtime default | Validation |
 |---|---|---|---|---|---|---|
 | Device-key-authenticated WS into HA (LAN) | Custom `HomeAssistantView` WebSocket (ADR-0001) | none on device | no | **verified** (local HA 2026.2.3 spike) | available | Spike T1–T4; re-test on HA 2026.11 in M2 |
-| Same endpoint via HA Cloud remote URL | Nabu Casa remote UI → HA aiohttp app | none | no | source | unknown → **gate** | HV-R1 |
+| Same endpoint via HA Cloud remote URL | Nabu Casa remote UI → HA aiohttp app | none | no | **verified** (HV-R1, HA 2026.11.1, 15 min soak, p50 92 ms) | available | [HV-R1](evidence/HV-R1-2026-11-16.md); multi-hour soak from device in M5 |
 | Same endpoint via user's external HTTPS/WSS URL | Reverse proxy → HA | none | no | source (standard HTTP) | available | HV-R2 |
 | HA restricted token on device | — | — | — | **unsupported** (does not exist) | n/a | — |
 | Agent start at boot without login | `systemd --user` + linger | none (polkit self-linger) | no | source (upstream polkit) | available (opt-in) | HV-S1 |

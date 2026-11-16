@@ -20,4 +20,4 @@ The M0 spike showed that a custom integration can host its own WebSocket endpoin
 - If HA is down, the agent buffers events in a bounded queue, as specified.
 
 ## Validation
-Spike T1–T4 (done, LAN, HA 2026.2.3). HV-R1 (HA Cloud), HV-R2 (external URL). Re-run the spike on HA ≥ 2026.11 in M2.
+Spike T1–T4 (done, LAN, HA 2026.2.3). **HV-R1 passed 2026-11-16 (HA Cloud, HA 2026.11.1)**, see `docs/research/evidence/HV-R1-2026-11-16.md`. HV-R2 (external URL) pending. Re-run the spike on HA ≥ 2026.11 in M2.
