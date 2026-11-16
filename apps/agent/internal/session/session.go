@@ -16,6 +16,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/jafesu/deckbeacon/apps/agent/internal/collect"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/dispatch"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/identity"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/lifecycle"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/store"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/trust"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/ulid"
@@ -68,6 +70,12 @@ type Config struct {
 	Now               func() time.Time
 	Backoff           func(attempt int) time.Duration
 	OnStatus          func(Status)
+	// Lifecycle delivers sleep/resume/shutdown transitions (nil: none).
+	Lifecycle <-chan lifecycle.Event
+	// ExtraCapabilities are appended to the collector's capabilities.
+	ExtraCapabilities func() []collect.Capability
+	// AckWait bounds how long a sleep/shutdown is held for HA's ack (default 3 s).
+	AckWait time.Duration
 }
 
 // ErrRevoked means HA no longer recognises this device.
@@ -102,6 +110,9 @@ func New(cfg Config) (*Client, error) {
 	}
 	if cfg.Backoff == nil {
 		cfg.Backoff = DefaultBackoff
+	}
+	if cfg.AckWait <= 0 {
+		cfg.AckWait = 3 * time.Second
 	}
 	return &Client{cfg: cfg, serverKey: key}, nil
 }
@@ -161,7 +172,7 @@ func (c *Client) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			if errors.Is(err, errPreferLocal) {
+			if errors.Is(err, errPreferLocal) || errors.Is(err, errResumed) {
 				attempt, lastErr = 0, nil
 				break
 			}
@@ -179,16 +190,45 @@ func (c *Client) Run(ctx context.Context) error {
 			msg = lastErr.Error()
 		}
 		c.setStatus("reconnecting", "", "", msg)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(c.cfg.Backoff(attempt)):
+		if lastErr == nil && attempt == 0 {
+			continue // resumed or switching to local: reconnect now, no backoff
 		}
-		attempt++
+		wait := time.After(c.cfg.Backoff(attempt))
+	waitLoop:
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ev := <-c.cfg.Lifecycle:
+				// Offline: record the transition for later delivery and never delay the system.
+				c.recordLifecycle(ev)
+				ev.Ready()
+				if ev.Kind == lifecycle.Resume {
+					attempt = 0
+					break waitLoop
+				}
+			case <-wait:
+				attempt++
+				break waitLoop
+			}
+		}
 	}
 }
 
-var errPreferLocal = errors.New("local transport available again")
+var (
+	errPreferLocal = errors.New("local transport available again")
+	errResumed     = errors.New("device resumed from sleep")
+)
+
+// recordLifecycle queues the protocol event for a transition and returns its seq.
+func (c *Client) recordLifecycle(ev lifecycle.Event) uint64 {
+	data := map[string]any{"source": ev.Source, "confidence": ev.Confidence}
+	typ := map[lifecycle.Kind]string{lifecycle.Sleep: "device_suspending", lifecycle.Shutdown: "device_shutting_down", lifecycle.Resume: "device_resumed"}[ev.Kind]
+	if ev.Gap > 0 {
+		data["suspended_s"] = int(ev.Gap.Seconds())
+	}
+	return c.appendEvent(typ, data)
+}
 
 type helloBody struct {
 	AgentVersion string         `json:"agent_version"`
@@ -272,11 +312,13 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 		_ = c.cfg.Store.AckThrough(w.LastReceivedEventSeq)
 	}
 	hb := time.Duration(w.HeartbeatS) * time.Second
-	sessionStart := c.cfg.Now()
 	c.setStatus("connected_"+transport, transport, u.URL, "")
 	c.cfg.Log.Info("connected", "transport", transport, "integration", w.IntegrationVersion)
 
 	caps := c.cfg.Collector.Capabilities(ctx)
+	if c.cfg.ExtraCapabilities != nil {
+		caps = append(caps, c.cfg.ExtraCapabilities()...)
+	}
 	if _, err := conn.Send(ctx, "capabilities", map[string]any{"capabilities": caps}); err != nil {
 		return err
 	}
@@ -294,8 +336,10 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			if err != nil {
 				var inv *channel.InvalidMessageError
 				if errors.As(err, &inv) && m != nil {
-					rxErr <- err // strict for now: invalid inbound closes the session
-					return
+					// Lenient receiver (COMPATIBILITY.md): answer and continue.
+					if rerr := c.rejectInvalid(ctx, conn, m); rerr == nil {
+						continue
+					}
 				}
 				rxErr <- err
 				return
@@ -308,13 +352,32 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	defer telemetry.Stop()
 	heartbeat := time.NewTicker(hb)
 	defer heartbeat.Stop()
-	flush := time.NewTicker(time.Second)
+	flush := time.NewTicker(250 * time.Millisecond)
 	defer flush.Stop()
 	probe := time.NewTicker(c.cfg.LocalProbeEvery)
 	defer probe.Stop()
 	lastRx := c.cfg.Now()
 	var sentThrough uint64
 	localOK := 0
+	type held struct {
+		seq      uint64
+		ev       lifecycle.Event
+		deadline time.Time
+	}
+	var holding []held
+	releaseAcked := func(force bool) {
+		st, _ := c.cfg.Store.Stats()
+		kept := holding[:0]
+		for _, h := range holding {
+			if force || st.Acked >= h.seq || c.cfg.Now().After(h.deadline) {
+				h.ev.Ready()
+				continue
+			}
+			kept = append(kept, h)
+		}
+		holding = kept
+	}
+	defer releaseAcked(true) // never leave the system inhibited
 
 	sendTelemetry := func() error {
 		ms := c.cfg.Collector.Collect(ctx)
@@ -330,9 +393,9 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			return err
 		}
 		for _, e := range evs {
-			// An event is "live" only if it is delivered promptly within the
-			// session that produced it; anything else is backfill (spec 07).
-			e.Live = e.Live && e.OccurredAt.After(sessionStart.Add(-time.Second)) && c.cfg.Now().Sub(e.OccurredAt) < 30*time.Second
+			// An event is "live" only if it is delivered promptly; anything older is
+			// backfill and must not trigger time-sensitive automations (spec 07).
+			e.Live = e.Live && c.cfg.Now().Sub(e.OccurredAt) < 30*time.Second
 			if _, err := conn.Send(ctx, "event", e); err != nil {
 				return err
 			}
@@ -358,6 +421,9 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			if err := c.handle(ctx, conn, m); err != nil {
 				return err
 			}
+			if m.Type == "ack" {
+				releaseAcked(false)
+			}
 		case <-telemetry.C:
 			if err := sendTelemetry(); err != nil {
 				return err
@@ -366,6 +432,19 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			if err := flushEvents(); err != nil {
 				return err
 			}
+			releaseAcked(false)
+		case ev := <-c.cfg.Lifecycle:
+			seq := c.recordLifecycle(ev)
+			if ev.Kind == lifecycle.Resume {
+				// The old connection is stale after a suspend: reconnect now.
+				_ = conn.Close(websocket.StatusGoingAway, "resumed")
+				return errResumed
+			}
+			if err := flushEvents(); err != nil {
+				ev.Ready()
+				return err
+			}
+			holding = append(holding, held{seq: seq, ev: ev, deadline: c.cfg.Now().Add(c.cfg.AckWait)})
 		case <-heartbeat.C:
 			if c.cfg.Now().Sub(lastRx) > 3*hb {
 				return errors.New("heartbeat timeout")
@@ -431,11 +510,46 @@ func (c *Client) handle(ctx context.Context, conn *channel.Conn, m *channel.Mess
 	return nil
 }
 
-func (c *Client) appendEvent(typ string, data map[string]any) {
+func (c *Client) appendEvent(typ string, data map[string]any) uint64 {
 	raw, _ := json.Marshal(data)
-	if _, err := c.cfg.Store.AppendEvent(store.Event{EventID: ulid.New(), EventType: typ, OccurredAt: c.cfg.Now().UTC(), Live: true, Data: raw}); err != nil {
+	e, err := c.cfg.Store.AppendEvent(store.Event{EventID: ulid.New(), EventType: typ, OccurredAt: c.cfg.Now().UTC(), Live: true, Data: raw})
+	if err != nil {
 		c.cfg.Log.Error("event store", "err", err)
 	}
+	return e.EventSeq
+}
+
+// rejectInvalid answers a schema-invalid but decryptable message without
+// dropping the session: unknown commands are rejected as unsupported, anything
+// else gets a non-fatal unsupported_type error.
+func (c *Client) rejectInvalid(ctx context.Context, conn *channel.Conn, m *channel.Message) error {
+	if m.Type == "command" {
+		var cmd struct {
+			CommandID string `json:"command_id"`
+		}
+		if json.Unmarshal(m.Body, &cmd) == nil && validULID(cmd.CommandID) {
+			_, err := conn.Send(ctx, "command_result", dispatch.Result{CommandID: cmd.CommandID, State: "rejected",
+				Error: &dispatch.Error{Code: "unsupported", Message: "command not understood by this agent version"}})
+			return err
+		}
+	}
+	if !validULID(m.ID) {
+		return errors.New("invalid message without usable id")
+	}
+	_, err := conn.Send(ctx, "error", map[string]any{"ref_id": m.ID, "error": map[string]string{"code": "unsupported_type", "message": "message not understood by this agent version"}, "fatal": false})
+	return err
+}
+
+func validULID(s string) bool {
+	if len(s) != 26 {
+		return false
+	}
+	for _, r := range s {
+		if !strings.ContainsRune("0123456789ABCDEFGHJKMNPQRSTVWXYZ", r) {
+			return false
+		}
+	}
+	return true
 }
 
 // localReachable probes the first local URL: any HTTP answer from HA's /api/

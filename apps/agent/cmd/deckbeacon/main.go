@@ -28,6 +28,8 @@ commands:
   run      [--telemetry-interval 30s]  run the agent (normally via systemd --user)
   status   [--json]                    show identity, pairing and connection state
   unpair                               forget the local pairing
+  service  install [--at-boot] | uninstall | status [--json] | boot on|off [--force]
+                                       manage the systemd --user service (no sudo)
   version  [--json]                    print build information`
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -40,10 +42,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	root := fs.String("root", "/", "host root for /proc, /sys, /etc (testing only)")
 	var (
-		url, name *string
-		interval  *time.Duration
-		jsonOut   *bool
-		logLevel  *string
+		url, name     *string
+		interval      *time.Duration
+		jsonOut       *bool
+		logLevel      *string
+		atBoot, force *bool
 	)
 	switch cmd {
 	case "pair":
@@ -55,6 +58,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "status", "version":
 		jsonOut = fs.Bool("json", false, "machine-readable output")
 	case "unpair":
+	case "service":
+		atBoot = fs.Bool("at-boot", false, "also start at boot before login (systemd lingering)")
+		force = fs.Bool("force", false, "boot off: disable lingering even if DeckBeacon did not enable it")
+		jsonOut = fs.Bool("json", false, "machine-readable status")
 	case "help", "-h", "--help":
 		fmt.Fprintln(stdout, usageText)
 		return 0
@@ -99,6 +106,23 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		err = app.Status(e, *jsonOut)
 	case "unpair":
 		err = app.Unpair(e)
+	case "service":
+		action, rest := "", fs.Args()
+		if len(rest) > 0 {
+			action = rest[0]
+		}
+		if action == "boot" {
+			if len(rest) < 2 || (rest[1] != "on" && rest[1] != "off") {
+				fmt.Fprintln(stderr, "usage: deckbeacon service boot on|off [--force]")
+				return 2
+			}
+			action = "boot-" + rest[1]
+		}
+		if action == "" {
+			fmt.Fprintln(stderr, "usage: deckbeacon service install|uninstall|status|boot on|off")
+			return 2
+		}
+		err = app.Service(ctx, e, action, *atBoot, *force, *jsonOut)
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)

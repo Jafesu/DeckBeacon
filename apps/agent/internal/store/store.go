@@ -184,6 +184,21 @@ func (s *Store) Stats() (Stats, error) {
 	return st, err
 }
 
+// Meta returns a stored metadata string ("" if unset).
+func (s *Store) Meta(key string) (string, error) {
+	var v string
+	err := s.db.View(func(tx *bolt.Tx) error {
+		v = string(tx.Bucket(bMeta).Get([]byte("m:" + key)))
+		return nil
+	})
+	return v, err
+}
+
+// SetMeta stores a metadata string.
+func (s *Store) SetMeta(key, value string) error {
+	return s.db.Update(func(tx *bolt.Tx) error { return tx.Bucket(bMeta).Put([]byte("m:"+key), []byte(value)) })
+}
+
 // ErrDuplicate is returned by BeginCommand for a command already seen.
 var ErrDuplicate = errors.New("duplicate command")
 

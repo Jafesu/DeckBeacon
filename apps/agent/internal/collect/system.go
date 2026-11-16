@@ -54,6 +54,9 @@ func (s *System) Collect(ctx context.Context) []Metric {
 	return out
 }
 
+// BootTime returns the kernel boot time (/proc/stat btime).
+func (s *System) BootTime() (time.Time, error) { return s.readBootTime() }
+
 func (s *System) readCPU() (cpuSample, error) {
 	st, err := s.env.read("/proc/stat")
 	if err != nil {

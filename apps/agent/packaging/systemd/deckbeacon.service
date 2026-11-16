@@ -3,15 +3,15 @@ Description=DeckBeacon agent (Home Assistant companion for SteamOS)
 Documentation=https://github.com/Jafesu/DeckBeacon
 After=network-online.target
 Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=%h/.local/share/deckbeacon/bin/deckbeacon run
-Restart=on-failure
-RestartSec=5s
 # Backoff instead of restart storms (spec 03): at most 5 starts per 5 minutes.
 StartLimitIntervalSec=300
 StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart="%h/.local/share/deckbeacon/bin/deckbeacon" run
+Restart=on-failure
+RestartSec=5s
 # User-service hardening that does not need privileges.
 NoNewPrivileges=yes
 PrivateTmp=yes

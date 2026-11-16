@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/coder/websocket v1.8.14
+	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jafesu/deckbeacon/packages/protocol v0.0.0
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/net v0.62.0

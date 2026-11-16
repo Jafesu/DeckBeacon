@@ -40,6 +40,7 @@ type Server struct {
 	Received    []Msg
 	LastEvent   uint64
 	commands    chan any
+	raw         chan any // sent without schema validation (newer-protocol simulation)
 	conns       []*websocket.Conn
 	Heartbeat   int
 	Invalid     []string // schema violations seen (must stay empty)
@@ -48,7 +49,7 @@ type Server struct {
 // New starts the fake on a random port.
 func New() *Server {
 	kp, _ := noise.GenerateKeyPair(rand.Reader)
-	s := &Server{Static: kp, devices: map[string]bool{}, commands: make(chan any, 8), ConfirmSAS: make(chan string, 1), Heartbeat: 5, AutoConfirm: true}
+	s := &Server{Static: kp, devices: map[string]bool{}, commands: make(chan any, 8), raw: make(chan any, 8), ConfirmSAS: make(chan string, 1), Heartbeat: 5, AutoConfirm: true}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/deckbeacon/v1/pair", s.pair)
 	mux.HandleFunc("/api/deckbeacon/v1/ws", s.session)
@@ -75,6 +76,10 @@ func (s *Server) Paired(pubHex string) bool {
 
 // SendCommand queues a command body for the next connected session.
 func (s *Server) SendCommand(body any) { s.commands <- body }
+
+// SendRawCommand sends a command body WITHOUT validating it, e.g. a command name
+// from a newer protocol version.
+func (s *Server) SendRawCommand(body any) { s.raw <- body }
 
 // DropAll abruptly closes all session connections.
 func (s *Server) DropAll() {
@@ -110,10 +115,14 @@ type peer struct {
 }
 
 func (p *peer) send(ctx context.Context, typ string, body any) error {
+	return p.sendOpt(ctx, typ, body, true)
+}
+
+func (p *peer) sendOpt(ctx context.Context, typ string, body any, validate bool) error {
 	b, _ := json.Marshal(body)
 	p.seq++
 	env, _ := json.Marshal(map[string]any{"v": 1, "type": typ, "id": ulid.New(), "ts": time.Now().UTC().Format(time.RFC3339), "seq": p.seq, "body": json.RawMessage(b)})
-	if err := protocol.ValidateMessage(env); err != nil {
+	if err := protocol.ValidateMessage(env); validate && err != nil {
 		panic("fakeha sending invalid message: " + err.Error())
 	}
 	ct, err := p.sess.Seal(env)
@@ -273,6 +282,8 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 			}
 		case c := <-s.commands:
 			_ = p.send(ctx, "command", c)
+		case c := <-s.raw:
+			_ = p.sendOpt(ctx, "command", c, false)
 		case <-ctx.Done():
 			return
 		}

@@ -28,6 +28,7 @@ import (
 	"github.com/jafesu/deckbeacon/apps/agent/internal/session"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/store"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/trust"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/ulid"
 )
 
 // Env carries process-level dependencies.
@@ -158,6 +159,16 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 	}
 	defer st.Close()
 	sys := collect.NewSystem(e.Host)
+	if bt, err := sys.BootTime(); err == nil {
+		if booted, err := detectBoot(st, bootID(e.Host), bt, time.Now()); err != nil {
+			e.Log.Warn("boot detection", "err", err)
+		} else if booted {
+			e.Log.Info("new boot detected")
+		}
+	}
+	lc, lcCaps, stopLC := startLifecycle(ctx, e.Log)
+	defer stopLC()
+	svc, _ := serviceManager(e)
 	writeStatus := func(s session.Status) {
 		b, _ := json.MarshalIndent(s, "", "  ")
 		_ = fsutil.WriteFileAtomic(filepath.Join(e.Dirs.Runtime, "status.json"), b, 0o600)
@@ -177,6 +188,7 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 				Identity: id, Trust: tr, Store: st, Collector: sys, Dispatcher: dispatch.New(st, time.Now),
 				Hello:             session.HelloInfo{AgentVersion: semver(buildinfo.Version), Device: deviceInfo(e.Host, osr), BootID: bootID(e.Host), Mode: func() string { m, _ := sys.SessionMode(); return m }},
 				TelemetryInterval: telemetryInterval, Log: e.Log, OnStatus: writeStatus,
+				Lifecycle: lc, ExtraCapabilities: func() []collect.Capability { return lifecycleCapabilities(lcCaps, svc) },
 			})
 			if err != nil {
 				return err
@@ -191,9 +203,13 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 			return err
 		}
 		// Unpaired or revoked: wait for a (re-)pairing without hammering anything.
+		// Lifecycle transitions are acknowledged immediately so the system is
+		// never delayed while there is no one to tell.
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case ev := <-lc:
+			ev.Ready()
 		case <-time.After(5 * time.Second):
 		}
 	}
@@ -240,4 +256,41 @@ func Unpair(e Env) error {
 	}
 	fmt.Fprintln(e.Stdout, "Local pairing removed. Also delete this device in Home Assistant (Settings → Devices & services → DeckBeacon).")
 	return nil
+}
+
+func ulidNew() string { return ulid.New() }
+
+// Service runs `deckbeacon service <action>`.
+func Service(ctx context.Context, e Env, action string, atBoot, force, asJSON bool) error {
+	m, err := serviceManager(e)
+	if err != nil {
+		return err
+	}
+	var changes []string
+	switch action {
+	case "install":
+		changes, err = m.Install(ctx, atBoot)
+	case "uninstall":
+		changes, err = m.Uninstall(ctx)
+	case "boot-on":
+		changes, err = m.SetStartAtBoot(ctx, true, false)
+	case "boot-off":
+		changes, err = m.SetStartAtBoot(ctx, false, force)
+	case "status":
+		st := m.Status(ctx)
+		if asJSON {
+			return json.NewEncoder(e.Stdout).Encode(st)
+		}
+		fmt.Fprintf(e.Stdout, "unit installed: %v (current: %v)\nenabled: %s\nactive: %s\nstart at boot: %v\n", st.UnitInstalled, st.UnitCurrent, st.Enabled, st.Active, st.StartAtBoot)
+		return nil
+	default:
+		return fmt.Errorf("unknown service action %q", action)
+	}
+	for _, c := range changes {
+		fmt.Fprintln(e.Stdout, "-", c)
+	}
+	if len(changes) == 0 && err == nil {
+		fmt.Fprintln(e.Stdout, "nothing to change")
+	}
+	return err
 }

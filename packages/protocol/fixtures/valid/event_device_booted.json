@@ -1,0 +1,22 @@
+{
+  "description": "device booted (protocol 1.1)",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "event",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAB1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "event_id": "01JDAAAAAAAAAAAAAAAAAAAAB2",
+      "event_seq": 44,
+      "event_type": "device_booted",
+      "occurred_at": "2026-11-16T17:00:00Z",
+      "live": true,
+      "data": {
+        "boot_time": "2026-11-16T14:40:00Z",
+        "previous_boot_id": "0123456789abcdef0123456789abcdef"
+      }
+    }
+  }
+}
