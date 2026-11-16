@@ -1,6 +1,6 @@
 # ADR-0006: Decky bridge as a low-trust local client
 
-Status: Proposed (M0, 2026-11-16)
+Status: Accepted (approved by project owner 2026-11-16; see docs/research/M0-decisions.md)
 
 ## Context
 - Decky Loader runs as root. Plugin frontends share Steam's single CEF JS context, so any installed plugin can reach any other plugin's backend callables. Plugin backends run as `deck` unless they request `root`.

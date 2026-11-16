@@ -1,6 +1,6 @@
 # ADR-0003: User lingering replaces the root boot helper
 
-Status: Proposed (M0, 2026-11-16)
+Status: Accepted (approved by project owner 2026-11-16; see docs/research/M0-decisions.md)
 
 ## Context
 Spec 01/03 allow an optional root boot helper for metrics before login. On SteamOS:

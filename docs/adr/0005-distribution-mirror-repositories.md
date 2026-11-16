@@ -1,6 +1,6 @@
 # ADR-0005: Monorepo source of truth with generated distribution repositories
 
-Status: Proposed (M0, 2026-11-16)
+Status: Accepted (approved by project owner 2026-11-16; see docs/research/M0-decisions.md)
 
 ## Context
 - Since HA 2026.11, HACS has been the built-in **Marketplace**. The Marketplace repository-structure reference says: "A repository holds one item of one type". Integrations live in `custom_components/<domain>/` (or the root with `content_in_root`). `zip_release` is for integrations only. Releases must be *published*, and the manifest `version` must equal the tag.

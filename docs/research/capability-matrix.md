@@ -13,6 +13,8 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 
 **Tested hardware: none yet.** All SteamOS rows are pending the [hardware validation plan](hardware-validation-plan.md).
 
+**Tier 1 targets (D5):** Steam Deck LCD, Steam Deck OLED, and genuine SteamOS on non-Valve x86_64 hardware (reference unit: Dell G15, Intel/AMD CPU + NVIDIA GPU). Providers are chosen by runtime detection. "Device-dep." rows must list a result per reference unit.
+
 ## Transport and platform
 
 | Capability | Chosen source | Privilege | Needs Decky | Research status | Runtime default | Validation |
@@ -35,14 +37,15 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 | RAM / swap | `/proc/meminfo` | none | no | research | available | HV-T1 |
 | Storage per mount / library | `statfs` | none | no | research | available | HV-T1 |
 | Uptime / boot time | `/proc/uptime`, `CLOCK_BOOTTIME` | none | no | research | available | HV-T1 |
-| GPU busy % | `/sys/class/drm/card*/device/gpu_busy_percent` | none | no | research | available (device-dep.) | HV-T2 |
+| GPU busy % (AMD) | `/sys/class/drm/card*/device/gpu_busy_percent` | none | no | research | available (device-dep.) | HV-T2 |
+| GPU busy % / temp (NVIDIA) | NVML via `nvidia-smi` if the proprietary driver is present; otherwise unavailable | none | no | research | available or unavailable (detected) | HV-T7 |
 | CPU/GPU/APU temps | hwmon (`amdgpu`, `k10temp`, Deck hwmon) | none | no | research | available (device-dep.) | HV-T2 |
-| Fan RPM | Deck-specific hwmon | none | no | research | available on Deck only | HV-T2 |
+| Fan RPM | Deck hwmon; `dell_smm_hwmon`; any hwmon `fan*_input` | none | no | research | available (device-dep.) | HV-T2/T7 |
 | Battery %, charging, rate | `/sys/class/power_supply/BAT*` | none | no | research | available on handhelds | HV-T3 |
 | Model identification | DMI `board_name`/`product_name` | none | no | research | available | HV-T4 |
 | OS version / channel | `/etc/os-release` | none | no | research | available | HV-T4 |
 | Session mode (Gaming/Desktop) | gamescope-session vs Plasma detection | none | no | research | available (confidence) | HV-S2 |
-| Docked / external display | DRM connector status, power_supply AC, USB-C | none | no | research | available (heuristic) | HV-T5 |
+| Docked / external display | DRM connector status, power_supply AC, USB-C (laptops: "external display connected") | none | no | research | available (heuristic) | HV-T5 |
 | Volume read/write | PipeWire `wpctl` | none | no | research | available | HV-T6 |
 | Brightness read | sysfs backlight | none | no | research | available | HV-T6 |
 | Brightness write | Decky `SteamClient` | — | yes | experimental | disabled | HV-D3 |
@@ -55,7 +58,7 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 | Suspend | logind D-Bus (active session); Decky `SteamClient.System` preferred in Gaming Mode | polkit allow_active | optional | research | disabled (admin tier) | HV-P1 |
 | Reboot / power off | logind D-Bus | polkit allow_active | no | research | disabled (admin tier) | HV-P2 |
 | Ack before connection loss | protocol | — | no | design | available | HV-P2 |
-| Wake from sleep / off | WoL (dock Ethernet only, hw-dependent) | — | no | unsupported (default) | unsupported | per-device opt-in test |
+| Wake from sleep / off | WoL (dock or built-in Ethernet, hw-dependent; G15 candidate) | — | no | unsupported (default) | unsupported unless proven per device | HV-P4 |
 
 ## Steam / game management
 
@@ -67,7 +70,7 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 | Current game | `reaper` argv / `registry.vdf` / gamescope atom / Decky | none | optional | research | available (confidence) | HV-G2 |
 | Session start/stop tracking | current-game detector + suspend segmentation | none | no | research | available (opt-in history) | HV-G2 |
 | Launch game | `steam steam://rungameid/<id>` | user | no | research | available (game tier) | HV-G3 |
-| Close game (graceful) | Decky `SteamClient.Apps.TerminateApp` | — | yes | experimental | disabled | HV-D2 |
+| Close game (graceful) — experimental (D3) | Decky `SteamClient.Apps.TerminateApp` | — | yes | experimental | disabled | HV-D2 |
 | Force close | signal to `reaper` process tree | user | no | experimental | disabled (separate gate) | HV-G4 |
 | Download state & progress | ACF `StateFlags`/`Bytes*` + `content_log.txt`; Decky for queue | none | optional | research | available (partial) | HV-G5 |
 | Download queue order / scheduled | Decky `SteamClient.Downloads` | — | yes | experimental | disabled | HV-D2 |

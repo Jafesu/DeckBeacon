@@ -2,9 +2,12 @@
   "domain": "deckbeacon_spike",
   "name": "DeckBeacon transport spike (NOT FOR PRODUCTION)",
   "codeowners": [],
-  "dependencies": ["http"],
+  "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://example.invalid",
   "iot_class": "local_push",
   "requirements": [],
-  "version": "0.0.0"
+  "version": "0.0.2"
 }

@@ -2,6 +2,8 @@
 
 These tests turn `research` rows in the [capability matrix](capability-matrix.md) into evidence. They need a real SteamOS device and, for HV-R1, a Home Assistant instance with HA Cloud. **None have been run yet.**
 
+Reference units: **Dell G15 (SteamOS)**, the project's primary test machine, then Steam Deck LCD/OLED when available.
+
 Record for every run: date, device model (DMI `board_name`), SteamOS version and channel (`/etc/os-release`, `steamos-update --check` output), Steam client build, Decky version (if any), HA version, and full command output. Store results in `docs/research/evidence/<test-id>-<date>.md`.
 
 All tests are **read-only or reversible**. None writes Steam files.
@@ -38,6 +40,7 @@ Same as HV-R1 through a user-managed reverse proxy (nginx/Caddy/Cloudflare tunne
 |---|---|---|
 | HV-P1 | From a lingering user unit (with the deck session active, and again after logout), call logind `Suspend(false)` via D-Bus. Observe Steam's UI on resume. | Allowed when the session is active. Record any Steam UI desync. |
 | HV-P2 | Same for `Reboot`/`PowerOff` (do last). Confirm an ack can be sent before the network drops. | Allowed when active. Ack delivered. |
+| HV-P4 | (Non-Valve with Ethernet, e.g. G15) `ethtool <if> | grep Wake-on`. Suspend, then send a magic packet from the LAN. Record the result. |
 | HV-P3 | Take a logind `delay` inhibitor for sleep and shutdown. Log `PrepareForSleep(true/false)` timings. | Lock granted. Signals received with time to send a message. |
 
 ## Telemetry
@@ -50,6 +53,7 @@ Same as HV-R1 through a user-managed reverse proxy (nginx/Caddy/Cloudflare tunne
 | HV-T4 | `/sys/class/dmi/id/{board_name,product_name,sys_vendor}` and `/etc/os-release`. |
 | HV-T5 | DRM connector status (`/sys/class/drm/*/status`) handheld vs docked. Record USB-C/PD signals. |
 | HV-T6 | `wpctl get-volume @DEFAULT_AUDIO_SINK@` (set and restore). Backlight read. |
+| HV-T7 | **Non-Valve (Dell G15):** `lspci -k` for GPU and driver. `nvidia-smi --query-gpu=utilization.gpu,temperature.gpu --format=csv` if present. hwmon names (`coretemp`/`k10temp`/`dell_smm`). `power_supply` names. Confirm `ID=steamos` and the SteamOS build/channel. |
 | HV-N1 | `nmcli -t` device/wifi info. mDNS browse `_home-assistant._tcp` from the device (is avahi running?). |
 
 ## Steam (read-only)

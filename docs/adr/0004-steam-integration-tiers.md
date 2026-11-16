@@ -1,6 +1,6 @@
 # ADR-0004: Steam integration tiers
 
-Status: Proposed (M0, 2026-11-16)
+Status: Accepted (approved by project owner 2026-11-16; see docs/research/M0-decisions.md)
 
 ## Context
 Valve publishes no local control API for the Steam client. The spec forbids writing Steam internal state (02, 06, AGENTS.md) and forbids fabricating APIs (CLAUDE.md).

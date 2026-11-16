@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Status | **Draft — awaiting review and approval.** No production code exists or should be written until this is approved. |
+| Status | **Approved 2026-11-16** with amendments recorded in [`M0-decisions.md`](M0-decisions.md). |
 | Date | 2026-11-16 |
 | Scope | Spec v1.0 (`docs/specification/00–15`), `CLAUDE.md`, `AGENTS.md` |
-| Companion docs | [`capability-matrix.md`](capability-matrix.md), [`hardware-validation-plan.md`](hardware-validation-plan.md), [`../adr/`](../adr/) |
+| Companion docs | [`M0-decisions.md`](M0-decisions.md), [`capability-matrix.md`](capability-matrix.md), [`hardware-validation-plan.md`](hardware-validation-plan.md), [`../adr/`](../adr/) |
 | Evidence | [`research/spikes/ha-device-transport/`](../../research/spikes/ha-device-transport/) |
 
 ## 1. Executive summary
@@ -57,8 +57,8 @@ Distribution needs one change: as of **HA 2026.11, HACS is now the built-in *Mar
 
 | # | Gap | Proposed default (for approval) |
 |---|---|---|
-| G1 | Minimum supported versions (Q9). | HA ≥ **2026.5** (6 months back, covering Python 3.14). The Marketplace path requires ≥ 2026.11. Earlier versions install manually or via legacy HACS. SteamOS ≥ the current Stable at M2 start. Decky ≥ current stable at M4 start. Pin in M1. |
-| G2 | Initial hardware matrix (Q6). | Tier 1: Steam Deck LCD and OLED. Tier 2 (best effort): Steam Machine, Legion Go S (SteamOS SKU). Tier 3 (build only, arm64): Steam Frame. Decide once hardware is accessible. |
+| G1 | Minimum supported versions (Q9). | **Decided (D4):** HA ≥ **2026.5** (6 months back, covering Python 3.14). The Marketplace path requires ≥ 2026.11. Earlier versions install manually or via legacy HACS. SteamOS ≥ the current Stable at M2 start. Decky ≥ current stable at M4 start. Pin in M1. |
+| G2 | Initial hardware matrix (Q6). | **Decided (D5):** Tier 1 = Steam Deck LCD/OLED and genuine SteamOS on non-Valve x86_64 hardware (test unit: Dell G15). arm64 (Steam Frame) is build-only until hardware is available. |
 | G3 | Multiple HA instances per device? 01 says "one active logical session per HA pairing", which implies several pairings are allowed. | v1: **exactly one** HA pairing per device. A second pairing requires revoking the first. Multi-HA is deferred. |
 | G4 | Multiple Steam accounts on one device. | Report the active Steam account only (from `loginusers.vdf` `MostRecent`, numeric ID, hashed by default). Library is per device. Playtime is per active account. |
 | G5 | Clock skew for `expires_at` (07, 10). | The wire protocol carries a relative TTL plus HA send time. The agent checks it against its own receive time. Absolute times are informational only. |
@@ -172,6 +172,8 @@ Full threat model is a Milestone 1 deliverable. Key risks found now:
 Roadmap impact: **M3 (boot-time option)** shrinks to "linger opt-in + boot/login/suspend validation". The root helper becomes an unscheduled, demand-driven milestone. **M5 (remote)** reuses the M2 transport unchanged. Only URL selection and failover are new, provided HV-R1 passes.
 
 ## 8. Decisions requested from the reviewer
+
+> Answered 2026-11-16. See [`M0-decisions.md`](M0-decisions.md).
 
 1. Approve or amend ADR-0001…0006.
 2. **C2/U8:** Is pairing in Gaming Mode *without* Decky a v1 requirement? (Recommended: no. CLI and Desktop Mode are acceptable for v1.)

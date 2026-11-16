@@ -1,6 +1,6 @@
 # ADR-0002: Device identity, SAS pairing and end-to-end channel security
 
-Status: Proposed (M0, 2026-11-16)
+Status: Accepted (approved by project owner 2026-11-16; see docs/research/M0-decisions.md)
 
 ## Context
 - Home Assistant has no scoped tokens, so putting any HA token on the device breaks the spec's "no unrestricted HA token" rule.

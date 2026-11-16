@@ -27,7 +27,7 @@ YAML
 HPID=$!; trap 'kill $HPID 2>/dev/null || true' EXIT
 for i in $(seq 1 400); do curl -s -o /dev/null http://127.0.0.1:18123/ && break; sleep 1; done
 URL=ws://127.0.0.1:18123/api/deckbeacon_spike/ws
-echo "== T1 enrolled device key"; "$WORK/client" -url $URL -key "$WORK/good.seed" -device deck-test-1
+echo "== T1 enrolled device key"; "$WORK/client" -url $URL -key "$WORK/good.seed" -device deck-test-1 -soak 20s -interval 2s
 echo "== T2 unenrolled key (expect rejection, exit 3)"; set +e; "$WORK/client" -url $URL -key "$WORK/bad.seed" -device deck-test-1; echo "exit=$?"
 echo "== T3 HA REST API without token (expect 401)"; curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:18123/api/states
 echo "== T4 HA websocket API is NOT reachable with device key (device holds no HA token)"; "$WORK/client" -url ws://127.0.0.1:18123/api/websocket -key "$WORK/good.seed" -device deck-test-1; echo "exit=$?"; set -e

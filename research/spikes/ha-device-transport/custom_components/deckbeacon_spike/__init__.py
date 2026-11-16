@@ -30,14 +30,40 @@ MAX_MSG = 64 * 1024
 AUTH_TIMEOUT = 5.0
 
 
+def _data(hass: HomeAssistant) -> dict:
+    """Shared state; the view is registered once (aiohttp routes cannot be removed)."""
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {"devices": {}, "seen_cmd_acks": set(), "connections": {}}
+        hass.http.register_view(DeviceWebSocketView(hass))
+    return hass.data[DOMAIN]
+
+
+def _load_key(pub: str) -> Ed25519PublicKey:
+    return Ed25519PublicKey.from_public_bytes(base64.b64decode(pub))
+
+
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    conf = config.get(DOMAIN, {})
-    devices = {
-        dev_id: Ed25519PublicKey.from_public_bytes(base64.b64decode(pub))
-        for dev_id, pub in conf.get("devices", {}).items()
-    }
-    hass.data[DOMAIN] = {"devices": devices, "seen_cmd_acks": set(), "connections": {}}
-    hass.http.register_view(DeviceWebSocketView(hass))
+    """YAML path, used by the local runner."""
+    if DOMAIN in config:
+        data = _data(hass)
+        for dev_id, pub in config[DOMAIN].get("devices", {}).items():
+            data["devices"][dev_id] = _load_key(pub)
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry) -> bool:
+    """Config-entry path, used for the HA Cloud test (HV-R1)."""
+    _data(hass)["devices"][entry.data["device_id"]] = _load_key(entry.data["public_key"])
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry) -> bool:
+    """Unloading removes the device key; the endpoint then rejects everyone."""
+    data = _data(hass)
+    data["devices"].pop(entry.data["device_id"], None)
+    ws = data["connections"].pop(entry.data["device_id"], None)
+    if ws is not None:
+        await ws.close(code=4010, message=b"unloaded")
     return True
 
 
@@ -51,6 +77,8 @@ class DeviceWebSocketView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.WebSocketResponse:
         data = self.hass.data[DOMAIN]
+        if not data["devices"]:
+            return web.Response(status=404)
         ws = web.WebSocketResponse(max_msg_size=MAX_MSG, heartbeat=15)
         await ws.prepare(request)
 
@@ -85,13 +113,15 @@ class DeviceWebSocketView(HomeAssistantView):
                 if msg.type != WSMsgType.TEXT:
                     continue
                 payload = json.loads(msg.data)
-                if payload.get("type") == "telemetry":
+                if payload.get("type") == "ping":
+                    await ws.send_json({"type": "pong", "t": payload.get("t")})
+                elif payload.get("type") == "telemetry":
                     entity_id = f"sensor.{DOMAIN}_{slugify(dev_id)}_cpu"
                     self.hass.states.async_set(
                         entity_id, payload["cpu_percent"],
                         {"seq": payload["seq"], "unit_of_measurement": "%"},
                     )
-                    _LOGGER.warning("deckbeacon_spike: state %s", self.hass.states.get(entity_id))
+                    _LOGGER.info("deckbeacon_spike: state %s", self.hass.states.get(entity_id))
                 elif payload.get("type") == "command_ack":
                     cid = payload["command_id"]
                     if cid in data["seen_cmd_acks"]:

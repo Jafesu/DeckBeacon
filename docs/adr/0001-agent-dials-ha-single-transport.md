@@ -1,6 +1,6 @@
 # ADR-0001: Agent dials a DeckBeacon endpoint hosted inside Home Assistant
 
-Status: Proposed (M0, 2026-11-16)
+Status: Accepted (approved by project owner 2026-11-16; see docs/research/M0-decisions.md)
 
 ## Context
 Spec 04 asks for HA Zeroconf discovery of the agent, which implies the agent listens on the LAN. Spec 03 says the agent binds to loopback only. Spec 09 says the agent initiates remote sessions with no inbound ports. Using HA→agent on the LAN and agent→HA remotely would mean two transports, two auth paths, and harder session dedupe during local↔remote failover.
