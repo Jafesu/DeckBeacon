@@ -1,6 +1,6 @@
 # Milestone 3 — Boot-Time Option and Lifecycle: Plan, Acceptance Criteria, Results
 
-Status: **In progress** (started 2026-11-16; owner instruction: "Continue with m3")
+Status: **Complete** (2026-11-16). Software verified. Hardware validation pending (see caveat).
 
 ## Scope (roadmap item 3, as reshaped by ADR-0003)
 ADR-0003 replaced the root boot helper with **opt-in user lingering**. M3 therefore delivers:
@@ -34,3 +34,32 @@ No root component, no sudo, no second process.
 
 ## Hardware caveat
 Lingering, real logind behaviour, Steam's own suspend handling in Gaming Mode, and inhibitor timing are **unverified** until HV-S1, HV-S2, HV-P1 and HV-P3 run on the Dell G15 and a Steam Deck. The logind fake follows the documented `org.freedesktop.login1` interface. It is not a capture of real SteamOS behaviour.
+
+## Results (2026-11-16)
+Environment: Linux x86_64 container; Go 1.26.11; godbus/dbus v5.2.4; dbus-daemon (private session bus for the logind fake); Python 3.14.10; HA 2026.5.1 (minimum) and 2026.10.4 (latest) test harness.
+
+| AC | Result | Evidence |
+|---|---|---|
+| AC1 service install/uninstall | **pass** | `internal/service`: exact command sequence (`daemon-reload` → `enable --now` → `loginctl enable-linger`). A second install is a no-op. Uninstall reverses it. Foreign lingering is never disabled without `--force`. A refused lingering is reported with guidance while the unit stays enabled. Template equals `packaging/systemd/deckbeacon.service` (ExecStart aside). `%` escaping and unsafe-path rejection. |
+| AC2 logind client | **pass** | `TestLogindSleepResumeShutdown` against a fake `org.freedesktop.login1` on a private `dbus-daemon`: delay inhibitor `sleep:shutdown` taken. The inhibitor fd stays open until `Ready`, closes after it (observed as EOF on the fake's socket end). Re-taken after resume. Released by the 4 s cap for a slow consumer. `TestLogindUnavailable`: a bus without logind → error and graceful fallback. CI requires dbus-daemon so this never skips. |
+| AC3 announce before release; resume reconnect | **pass** | `TestSleepAnnouncedBeforeInhibitorRelease`: at release time HA had received **and acked** `device_suspending`. `TestResumeReconnectsWithoutBackoff`: with a 1 h backoff configured, the agent reconnects immediately and delivers `device_resumed`. `TestSleepWhileOfflineDoesNotDelaySystem`: offline shutdown released at once and queued. |
+| AC4 clock-jump heuristic | **pass** | No report for 2 s / 29 s steps. Report for 90 s (`confidence: heuristic`, gap carried). Zero gap for ordinary elapsed time. |
+| AC5 boot detection | **pass** | `TestDetectBootOncePerBootID` (a, a, a, b → 2 events, `previous_boot_id` set). E2E: exactly one `device_booted` across a reload and a forced reconnect. |
+| AC6 HA power state | **pass** | `test_power.py`: unknown → on (hello) → suspended (announced, survives disconnect while connection = offline) → on (resume; a backfilled suspend does not override) → unknown (unannounced drop) → on (boot). E2E: `power_state=on`. |
+| AC7 no privilege escalation | **pass** | CI grep over agent sources (`"sudo"`, `"pkexec"`, `"doas"`, `"su"`, `"--system"`). The service tests assert no privileged calls. |
+| AC8 CI | **pass** | [Run #14](https://github.com/Jafesu/DeckBeacon/actions/runs/43969248324): all jobs green: Go (`-race`, logind tests **required** via `DECKBEACON_REQUIRE_DBUS`, govulncheck), protocol-python, fixtures (+schema sync, token grep, privilege grep), HA integration + E2E on 2026.5.1 and latest, secret scan. |
+
+Lenient receivers (protocol 1.1 compatibility, added because `device_booted` is a new event type): an unknown command from a newer HA → `rejected/unsupported` with the session kept (`TestUnknownCommandFromNewerHAIsRejectedNotFatal`). An unknown event type from a newer agent → acked and skipped, session kept (`test_unknown_event_type_is_acked_and_skipped`).
+
+Test counts (local): Go: all 16 agent packages + protocol pass with `-race`. Python protocol: 56. Fixtures: 25 valid / 30 invalid. HA integration + E2E: **29 passed on HA 2026.5.1 and on HA 2026.10.4**.
+
+### Findings during M3
+- `StartLimitIntervalSec`/`StartLimitBurst` were in `[Service]` in the M2 unit file. systemd only honours them in `[Unit]`. Fixed.
+- Test-harness lesson: `os.File` deadlines need a non-blocking fd. A blocking socketpair made the "not released yet" check silently wait for the 4 s safety release.
+- Race detector caught an unsynchronised `MaxDelay` write. Now atomic.
+
+### Known limitations (hardware-dependent, carried forward)
+- **Gaming Mode suspend is Steam-driven.** Whether logind emits `PrepareForSleep` early enough for the 3 s ack window on SteamOS is unknown: **HV-P3**.
+- Self-lingering under SteamOS polkit policy: **HV-S1**. Unit survival across an A/B update: **HV-S2**.
+- Power commands (suspend/reboot from HA) are **not** part of M3. They belong to the power/admin tier (M7) and HV-P1/P2.
+- Power state is held in memory: after an HA restart it is `unknown` until the device reconnects.
