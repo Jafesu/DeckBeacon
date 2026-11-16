@@ -1,0 +1,13 @@
+{
+  "description": "seq starts at 1",
+  "schema": "envelope",
+  "error_path": "/seq",
+  "message": {
+    "v": 1,
+    "type": "ping",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 0,
+    "body": {}
+  }
+}

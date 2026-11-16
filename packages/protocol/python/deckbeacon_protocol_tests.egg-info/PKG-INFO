@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: deckbeacon-protocol-tests
+Version: 0.0.0
+Summary: Cross-language contract tests for the DeckBeacon protocol (Python side)
+Requires-Python: >=3.13
+Requires-Dist: jsonschema[format]==4.26.0
+Provides-Extra: dev
+Requires-Dist: pytest==9.2.0; extra == "dev"
+Requires-Dist: ruff==0.17.5; extra == "dev"

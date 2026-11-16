@@ -1,0 +1,21 @@
+{
+  "description": "percent 0..100",
+  "schema": "envelope",
+  "error_path": "/body/args/percent",
+  "message": {
+    "v": 1,
+    "type": "command",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAA13",
+      "name": "set_volume",
+      "args": {
+        "percent": 150
+      },
+      "ttl_s": 60,
+      "issued_at": "2026-11-16T17:00:00Z"
+    }
+  }
+}

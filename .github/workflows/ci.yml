@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go (agent + protocol)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.x"
+          cache-dependency-path: |
+            apps/agent/go.sum
+            packages/protocol/go.sum
+      - name: gofmt
+        run: |
+          out="$(gofmt -l apps/agent packages/protocol)"
+          if [ -n "$out" ]; then echo "unformatted:"; echo "$out"; exit 1; fi
+      - name: vet
+        run: go vet ./apps/agent/... ./packages/protocol/...
+      - name: test (workspace)
+        run: go test -race -count=1 ./apps/agent/... ./packages/protocol/...
+      - name: test (module mode, no go.work)
+        env:
+          GOWORK: "off"
+        run: |
+          (cd packages/protocol && go test -count=1 ./...)
+          (cd apps/agent && go test -count=1 ./...)
+      - name: cross-build agent
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          for arch in amd64 arm64; do
+            GOOS=linux GOARCH=$arch go build -trimpath \
+              -ldflags "-s -w -X github.com/jafesu/deckbeacon/apps/agent/internal/buildinfo.Commit=${GITHUB_SHA::7}" \
+              -o dist/deckbeacon-linux-$arch ./apps/agent/cmd/deckbeacon
+          done
+          file dist/*
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          (cd apps/agent && "$(go env GOPATH)/bin/govulncheck" ./...)
+          (cd packages/protocol && "$(go env GOPATH)/bin/govulncheck" ./...)
+
+  protocol-python:
+    name: Protocol contract (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/protocol/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -e '.[dev]'
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest -q
+
+  fixtures:
+    name: Fixture structure
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/check_fixtures.py packages/protocol/fixtures
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

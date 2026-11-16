@@ -1,0 +1,20 @@
+[project]
+name = "deckbeacon-protocol-tests"
+version = "0.0.0"
+description = "Cross-language contract tests for the DeckBeacon protocol (Python side)"
+requires-python = ">=3.13"
+dependencies = ["jsonschema[format]==4.26.0"]
+
+[project.optional-dependencies]
+dev = ["pytest==9.2.0", "ruff==0.17.5"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "PT"]
+ignore = ["S101"]

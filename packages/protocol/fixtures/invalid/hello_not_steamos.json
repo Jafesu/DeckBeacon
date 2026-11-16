@@ -1,0 +1,38 @@
+{
+  "description": "SteamOS only",
+  "schema": "envelope",
+  "error_path": "/body/device/os/id",
+  "message": {
+    "v": 1,
+    "type": "hello",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "agent_version": "0.1.0",
+      "protocol": {
+        "min": 1,
+        "max": 1
+      },
+      "device": {
+        "device_id": "k7q2m4x6z3a5b7c2d4e6f3g5h7",
+        "model": "Galileo",
+        "vendor": "Valve",
+        "os": {
+          "id": "bazzite",
+          "version_id": "3.7.13",
+          "build_id": "20251110.1",
+          "variant_id": "steamdeck",
+          "channel": "stable"
+        },
+        "arch": "x86_64"
+      },
+      "boot_id": "0123456789abcdef0123456789abcdef",
+      "session": {
+        "mode": "gaming",
+        "transport": "local",
+        "resume_after_event_seq": 41
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+pyproject.toml
+deckbeacon_protocol_tests.egg-info/PKG-INFO
+deckbeacon_protocol_tests.egg-info/SOURCES.txt
+deckbeacon_protocol_tests.egg-info/dependency_links.txt
+deckbeacon_protocol_tests.egg-info/requires.txt
+deckbeacon_protocol_tests.egg-info/top_level.txt
+tests/test_contract.py

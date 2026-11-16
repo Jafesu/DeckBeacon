@@ -1,0 +1,19 @@
+{
+  "description": "event backfilled suspend",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "event",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "event_id": "01JDAAAAAAAAAAAAAAAAAAAAA8",
+      "event_seq": 43,
+      "event_type": "device_suspending",
+      "occurred_at": "2026-11-16T17:00:00Z",
+      "live": false,
+      "data": {}
+    }
+  }
+}

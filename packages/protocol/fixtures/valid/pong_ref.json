@@ -1,0 +1,14 @@
+{
+  "description": "pong ref",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "pong",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "ref_id": "01JDAAAAAAAAAAAAAAAAAAAAA1"
+    }
+  }
+}

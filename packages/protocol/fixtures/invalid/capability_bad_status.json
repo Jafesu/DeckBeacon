@@ -1,0 +1,46 @@
+{
+  "description": "status vocabulary",
+  "schema": "envelope",
+  "error_path": "/body/capabilities/0/status",
+  "message": {
+    "v": 1,
+    "type": "capabilities",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "capabilities": [
+        {
+          "id": "telemetry.gpu.busy",
+          "status": "maybe",
+          "tier": "system",
+          "source": "nvml",
+          "privilege": "none",
+          "reason": "NVIDIA proprietary driver not loaded"
+        },
+        {
+          "id": "game.launch",
+          "status": "available",
+          "tier": "steam_url",
+          "source": "steam://rungameid",
+          "privilege": "user"
+        },
+        {
+          "id": "game.close",
+          "status": "disabled",
+          "tier": "decky_steamclient",
+          "experimental": true,
+          "source": "SteamClient.Apps",
+          "privilege": "decky",
+          "reason": "experimental; opt-in required"
+        },
+        {
+          "id": "power.wake",
+          "status": "unsupported",
+          "tier": "none",
+          "source": "none"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "description": "ULID excludes I, L, O, U",
+  "schema": "envelope",
+  "error_path": "/id",
+  "message": {
+    "v": 1,
+    "type": "ping",
+    "id": "01JDILOUAAAAAAAAAAAAAAAAAA",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {}
+  }
+}

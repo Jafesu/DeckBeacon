@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/coder/websocket"
@@ -78,24 +79,35 @@ func main() {
 func runSoak(ctx context.Context, c *websocket.Conn, d, interval time.Duration) {
 	end := time.Now().Add(d)
 	var rtts []time.Duration
+	other := 0
 	seq := 1
 	for time.Now().Before(end) {
 		seq++
 		t0 := time.Now()
-		check(wsjson.Write(ctx, c, map[string]any{"type": "ping", "t": t0.UnixNano()}))
-		var pong map[string]any
-		if err := wsjson.Read(ctx, c, &pong); err != nil {
-			fmt.Printf("soak: connection lost after %s: %v\n", d-time.Until(end), err)
-			os.Exit(5)
+		check(wsjson.Write(ctx, c, map[string]any{"type": "ping", "t": strconv.FormatInt(t0.UnixNano(), 10)}))
+		// Read until the pong that echoes this ping's timestamp; count any other frames
+		// (e.g. a "duplicate" notice when the server already saw the command ack).
+		var rtt time.Duration
+		for {
+			var frame map[string]any
+			if err := wsjson.Read(ctx, c, &frame); err != nil {
+				fmt.Printf("soak: connection lost after %s: %v\n", d-time.Until(end), err)
+				os.Exit(5)
+			}
+			if frame["type"] == "pong" && frame["t"] == strconv.FormatInt(t0.UnixNano(), 10) {
+				rtt = time.Since(t0)
+				break
+			}
+			other++
 		}
-		rtts = append(rtts, time.Since(t0))
+		rtts = append(rtts, rtt)
 		check(wsjson.Write(ctx, c, map[string]any{"type": "telemetry", "seq": seq, "cpu_percent": float64(seq % 100)}))
 		time.Sleep(interval)
 	}
 	sort.Slice(rtts, func(i, j int) bool { return rtts[i] < rtts[j] })
 	p := func(q float64) time.Duration { return rtts[int(q*float64(len(rtts)-1))] }
-	fmt.Printf("soak: %s, %d round trips, no disconnects, rtt p50=%s p95=%s max=%s\n",
-		d, len(rtts), p(0.5).Round(time.Millisecond), p(0.95).Round(time.Millisecond), rtts[len(rtts)-1].Round(time.Millisecond))
+	fmt.Printf("soak: %s, %d matched round trips, %d other frames, no disconnects, rtt p50=%s p95=%s max=%s\n",
+		d, len(rtts), other, p(0.5).Round(time.Millisecond), p(0.95).Round(time.Millisecond), rtts[len(rtts)-1].Round(time.Millisecond))
 }
 
 func check(err error) {

@@ -1,0 +1,18 @@
+{
+  "description": "notification status actioned",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "notification_status",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "notification_id": "01JDAAAAAAAAAAAAAAAAAAAA14",
+      "state": "actioned",
+      "at": "2026-11-16T17:00:00Z",
+      "action_id": "ignore",
+      "surface": "decky_inbox"
+    }
+  }
+}

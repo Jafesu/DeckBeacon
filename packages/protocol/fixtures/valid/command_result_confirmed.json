@@ -1,0 +1,18 @@
+{
+  "description": "command result confirmed",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "command_result",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAAA9",
+      "state": "confirmed",
+      "result": {
+        "running_app_id": 526870
+      }
+    }
+  }
+}

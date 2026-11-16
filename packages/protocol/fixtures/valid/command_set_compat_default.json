@@ -1,0 +1,21 @@
+{
+  "description": "command set compat default",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "command",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAA11",
+      "name": "set_compatibility_tool",
+      "args": {
+        "app_id": 1091500,
+        "tool": null
+      },
+      "ttl_s": 60,
+      "issued_at": "2026-11-16T17:00:00Z"
+    }
+  }
+}

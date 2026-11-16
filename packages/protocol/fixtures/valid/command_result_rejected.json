@@ -1,0 +1,20 @@
+{
+  "description": "command result rejected",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "command_result",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAA1A",
+      "state": "rejected",
+      "error": {
+        "code": "disabled",
+        "message": "close_game is experimental and disabled",
+        "retryable": false
+      }
+    }
+  }
+}

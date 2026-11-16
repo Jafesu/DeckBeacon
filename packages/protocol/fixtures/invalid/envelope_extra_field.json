@@ -1,0 +1,14 @@
+{
+  "description": "senders must not add envelope fields",
+  "schema": "envelope",
+  "error_path": "",
+  "message": {
+    "v": 1,
+    "type": "ping",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {},
+    "token": "x"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "description": "max 3 actions",
+  "schema": "envelope",
+  "error_path": "/body/actions",
+  "message": {
+    "v": 1,
+    "type": "notification",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "notification_id": "01JDAAAAAAAAAAAAAAAAAAAA14",
+      "title": "Doorbell",
+      "message": "Someone is at the front door",
+      "icon": "security",
+      "priority": "high",
+      "category": "security.doorbell",
+      "ttl_s": 120,
+      "require_ack": true,
+      "source": "automation.doorbell",
+      "actions": [
+        {
+          "action_id": "a0",
+          "label": "x"
+        },
+        {
+          "action_id": "a1",
+          "label": "x"
+        },
+        {
+          "action_id": "a2",
+          "label": "x"
+        },
+        {
+          "action_id": "a3",
+          "label": "x"
+        }
+      ]
+    }
+  }
+}

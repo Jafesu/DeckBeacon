@@ -1,2 +1,11 @@
 # Repository engineering rules
 Read docs/specification/00-product-overview.md and all relevant specifications before changing code. SteamOS only. Do not assume unvalidated Steam or HA Cloud APIs. Security-first, local-first, no mandatory cloud. Keep Decky and dashboard optional. No direct mutation of Steam internal data for management. Add tests and document hardware evidence for each capability. Maintain protocol backward compatibility and stable device identity. Respect user-approved managed updates and safe game-session deferral. Stop and request architectural decision when a blocking feasibility assumption fails.
+
+## Repository conventions (added M1, 2026-11-16)
+- **Layout:** `apps/agent` (Go), `apps/homeassistant` (Python HA integration, domain `deckbeacon`), `apps/decky` (TS/React, optional), `apps/dashboard` (TS Lovelace cards, optional), `packages/protocol` (schemas, fixtures, Go validator, Python contract tests), `scripts`, `tests` (cross-component integration), `docs` (`specification/`, `adr/`, `research/`, `security/`, `milestones/`), `research/spikes` (throwaway; never imported, built, or released).
+- **Decisions:** accepted ADRs in `docs/adr` are binding alongside the specification. If they conflict, the ADR wins (it records an approved change). Owner decisions: `docs/research/M0-decisions.md`.
+- **Protocol changes:** follow `packages/protocol/COMPATIBILITY.md`. Every schema change ships with valid and invalid fixtures, and both the Go and Python suites must pass.
+- **Hardware truth:** capability claims live in `docs/research/capability-matrix.md`. A row only moves forward with evidence in `docs/research/evidence/` (device, SteamOS build, Steam build, date). Tier 1 includes non-Valve SteamOS hardware (reference: Dell G15), so never key behaviour on Valve board names.
+- **Toolchains:** Go 1.24 (`CGO_ENABLED=0`, linux/amd64 and arm64). Python 3.13+ with `ruff` and `pytest`. Minimum Home Assistant 2026.5.
+- **Security gates:** no HA access tokens on the device. Steam credential files are never copied or logged (allowlisted parser only). All inbound messages are schema-validated. See `docs/security/threat-model.md`.
+- **Milestones:** plan, acceptance criteria, and results in `docs/milestones/M<n>-plan.md`. A milestone is complete only when its results section records reproducible evidence and known limitations.
