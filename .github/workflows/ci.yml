@@ -31,7 +31,11 @@ jobs:
       - name: vet
         run: go vet ./apps/agent/... ./packages/protocol/...
       - name: test (workspace)
-        run: go test -race -count=1 ./apps/agent/... ./packages/protocol/...
+        env:
+          DECKBEACON_REQUIRE_DBUS: "1"  # logind tests run against a private dbus-daemon; never skip in CI
+        run: |
+          command -v dbus-daemon || (sudo apt-get update -q && sudo apt-get install -yq dbus)
+          go test -race -count=1 ./apps/agent/... ./packages/protocol/...
       - name: test (module mode, no go.work)
         env:
           GOWORK: "off"

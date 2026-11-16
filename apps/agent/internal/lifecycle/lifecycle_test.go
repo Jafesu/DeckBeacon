@@ -57,13 +57,17 @@ func (f *fakeLogind) Inhibit(what, who, why, mode string) (dbus.UnixFD, *dbus.Er
 
 func privateBus(t *testing.T) string {
 	t.Helper()
+	skip := t.Skip
+	if os.Getenv("DECKBEACON_REQUIRE_DBUS") != "" { // CI: the logind evidence must not silently skip
+		skip = t.Fatal
+	}
 	if _, err := exec.LookPath("dbus-daemon"); err != nil {
-		t.Skip("dbus-daemon not installed")
+		skip("dbus-daemon not installed")
 	}
 	cmd := exec.Command("dbus-daemon", "--session", "--nofork", "--nopidfile", "--print-address=1")
 	out, _ := cmd.StdoutPipe()
 	if err := cmd.Start(); err != nil {
-		t.Skip(err)
+		skip(err)
 	}
 	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
 	addr, err := bufio.NewReader(out).ReadString('\n')
