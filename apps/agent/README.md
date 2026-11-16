@@ -7,6 +7,7 @@ deckbeacon pair --url http://homeassistant.local:8123   # or omit --url to use m
 deckbeacon run                                          # normally via packaging/systemd/deckbeacon.service
 deckbeacon status [--json]
 deckbeacon unpair
+deckbeacon service install [--at-boot] | uninstall | status | boot on|off   # see docs/agent-lifecycle.md
 ```
 
 | Package | Role |
@@ -19,6 +20,8 @@ deckbeacon unpair
 | `internal/session` | connection state machine, local-first failover, backoff, heartbeat, resume |
 | `internal/dispatch` | commands: dedupe, TTL, unsupported |
 | `internal/collect` | system telemetry under a configurable root (synthetic trees in `testdata/roots`) |
+| `internal/service` | systemd --user unit + opt-in lingering (never sudo) |
+| `internal/lifecycle` | logind sleep/shutdown with delay inhibitor; clock-jump resume fallback |
 | `internal/discovery` | mDNS legacy-unicast browse for `_home-assistant._tcp` |
 
 Testing: `go test -race ./...`. The `testdata/roots/*` trees are **synthetic** until replaced by real captures.

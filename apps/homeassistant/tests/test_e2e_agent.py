@@ -49,6 +49,7 @@ class Agent:
             "PATH": os.environ.get("PATH", ""),
             "HOME": str(home),
             "DECKBEACON_STATE_DIR": str(self.state),
+            "DECKBEACON_LOGIND_ADDRESS": "none",
             "DECKBEACON_CONFIG_DIR": str(home / "cfg"),
             "XDG_RUNTIME_DIR": str(self.runtime),
         }
@@ -167,7 +168,11 @@ async def test_go_agent_end_to_end(hass: HomeAssistant, client, agent_bin, tmp_p
         assert state(hass, deck_id, "gpu_busy") == "42"
         assert state(hass, deck_id, "session_mode") == "gaming"
         assert state(hass, deck_id, "connection") == "local"
+        assert state(hass, deck_id, "power_state") == "on"
         assert state(hass, deck_id, "power_ac_online", "binary_sensor") == "off"
+        caps = {c["id"]: c["status"] for c in hass.data[DOMAIN].runtimes[deck_entry].capabilities}
+        assert caps["lifecycle.sleep_notify"] == "unavailable"  # logind disabled for the test
+        assert caps["lifecycle.resume_detect"] == "available" and caps["service.start_at_boot"] == "disabled"
         await until(hass, "g15 telemetry", lambda: state(hass, g15_id, "thermal_cpu_c") == "71")
         assert state(hass, g15_id, "gpu_busy") == STATE_UNAVAILABLE  # no NVIDIA tool: honest unavailable
         assert state(hass, g15_id, "session_mode") == "desktop"
@@ -192,6 +197,8 @@ async def test_go_agent_end_to_end(hass: HomeAssistant, client, agent_bin, tmp_p
         await until(hass, "events", lambda: sum(1 for e in events if e["device_id"] == deck_id) >= 3)
         deck_seqs = [e["event_seq"] for e in events if e["device_id"] == deck_id]
         assert len(deck_seqs) == len(set(deck_seqs)), deck_seqs
+        boots = [e for e in events if e["device_id"] == deck_id and e["event_type"] == "device_booted"]
+        assert len(boots) == 1, boots  # once per boot_id, not per connection (M3-AC5)
 
         # Revocation (AC8): delete the device in HA → agent goes to revoked and stays idle.
         await hass.config_entries.async_remove(deck_entry)

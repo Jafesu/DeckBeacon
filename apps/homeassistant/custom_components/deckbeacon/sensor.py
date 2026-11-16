@@ -153,7 +153,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DeckBeaconConfigEntry, a
         if new:
             async_add_entities(new)
 
-    async_add_entities([ConnectionSensor(runtime), LastSeenSensor(runtime)])
+    async_add_entities([ConnectionSensor(runtime), PowerStateSensor(runtime), LastSeenSensor(runtime)])
     add(entry.data.get(CONF_METRIC_KEYS, []))
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_NEW_METRIC.format(entry.entry_id), add))
 
@@ -200,6 +200,21 @@ class ConnectionSensor(DeckBeaconEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         return self.runtime.transport if self.runtime.connected and self.runtime.transport else "offline"
+
+
+class PowerStateSensor(DeckBeaconEntity, SensorEntity):
+    """Physical power state as announced by the device, independent of connection."""
+
+    _attr_translation_key = "power_state"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["on", "suspended", "shutting_down", "unknown"]
+
+    def __init__(self, runtime) -> None:
+        super().__init__(runtime, "power_state")
+
+    @property
+    def native_value(self) -> str:
+        return self.runtime.power_state
 
 
 class LastSeenSensor(DeckBeaconEntity, SensorEntity):

@@ -23,10 +23,12 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 | Same endpoint via HA Cloud remote URL | Nabu Casa remote UI → HA aiohttp app | none | no | **verified** (HV-R1, HA 2026.11.1, 15 min soak, p50 92 ms) | available | [HV-R1](evidence/HV-R1-2026-11-16.md); multi-hour soak from device in M5 |
 | Same endpoint via user's external HTTPS/WSS URL | Reverse proxy → HA | none | no | source (standard HTTP) | available | HV-R2 |
 | HA restricted token on device | — | — | — | **unsupported** (does not exist) | n/a | — |
-| Agent start at boot without login | `systemd --user` + linger | none (polkit self-linger) | no | source (upstream polkit) | available (opt-in) | HV-S1 |
+| Agent start at boot without login | `systemd --user` + linger via `deckbeacon service install --at-boot` (M3) | none (polkit self-linger) | no | source (upstream polkit) | disabled until opted in | HV-S1 |
 | Agent in Gaming & Desktop modes | `systemd --user` | none | no | research | available | HV-S2 |
 | Root boot helper | system unit | root + sudo password | no | research (deferred, ADR-0003) | unsupported (v1) | — |
-| Sleep/shutdown pre-announce | logind delay inhibitor + `PrepareForSleep` | none (expected) | no | research | available | HV-P3 |
+| Sleep/shutdown pre-announce | logind delay inhibitor + `PrepareForSleep`/`PrepareForShutdown` (M3; tested against a fake login1 on a private D-Bus) | none (expected) | no | research | available when logind reachable | HV-P3 |
+| Resume detection | logind `PrepareForSleep(false)`; fallback wall/monotonic clock divergence (heuristic) | none | no | research | available | HV-P3 |
+| Boot detection | kernel `boot_id` change → `device_booted` | none | no | research | available | HV-S2 |
 | Discover HA on LAN | mDNS browse `_home-assistant._tcp` | none | no | research | available | HV-N1 |
 
 ## System telemetry

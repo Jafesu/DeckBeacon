@@ -29,7 +29,7 @@ Same as HV-R1 through a user-managed reverse proxy (nginx/Caddy/Cloudflare tunne
 
 | ID | Test | Expected |
 |---|---|---|
-| HV-S1 | `loginctl enable-linger` as `deck` without sudo. Reboot. Check `systemctl --user status` of a dummy unit before the Steam UI appears. Check `/usr/share/polkit-1/actions/org.freedesktop.login1.policy` and `/etc/polkit-1/rules.d` for SteamOS overrides. | Linger is allowed and the unit is running at boot. |
+| HV-S1 | `deckbeacon service install --at-boot` (runs `loginctl enable-linger` as `deck`, no sudo); record the exact error if refused. Reboot. Check `systemctl --user status` of a dummy unit before the Steam UI appears. Check `/usr/share/polkit-1/actions/org.freedesktop.login1.policy` and `/etc/polkit-1/rules.d` for SteamOS overrides. | Linger is allowed and the unit is running at boot. |
 | HV-S2 | Dummy user unit survives Gaming↔Desktop switches, suspend/resume, and a SteamOS update (A/B switch). Detect the session mode. | Unit persists. Mode detected correctly. |
 | HV-S3 | `gdbus call … org.freedesktop.Notifications.Notify` with actions in Desktop Mode, and in Gaming Mode. | Desktop: actions work. Gaming: record behaviour. |
 | HV-S4 | Loopback HTTP server reachable from the Desktop Mode browser. Confirm there is no Gaming Mode path without Decky. | As stated. |
@@ -41,7 +41,7 @@ Same as HV-R1 through a user-managed reverse proxy (nginx/Caddy/Cloudflare tunne
 | HV-P1 | From a lingering user unit (with the deck session active, and again after logout), call logind `Suspend(false)` via D-Bus. Observe Steam's UI on resume. | Allowed when the session is active. Record any Steam UI desync. |
 | HV-P2 | Same for `Reboot`/`PowerOff` (do last). Confirm an ack can be sent before the network drops. | Allowed when active. Ack delivered. |
 | HV-P4 | (Non-Valve with Ethernet, e.g. G15) `ethtool <if> | grep Wake-on`. Suspend, then send a magic packet from the LAN. Record the result. |
-| HV-P3 | Take a logind `delay` inhibitor for sleep and shutdown. Log `PrepareForSleep(true/false)` timings. | Lock granted. Signals received with time to send a message. |
+| HV-P3 | With the agent running (`--log-level debug`), suspend from **Gaming Mode (Steam power menu)** and from Desktop Mode. In HA, check `device_suspending` arrives before sleep and `power_state=suspended`. `busctl --system call org.freedesktop.login1 /org/freedesktop/login1 org.freedesktop.login1.Manager ListInhibitors` shows the DeckBeacon delay lock. Repeat for shutdown. Record time from announcement to ack. | Lock granted. Announcement acked before sleep in both modes. |
 
 ## Telemetry
 

@@ -21,3 +21,6 @@ Spec 01/03 allow an optional root boot helper for metrics before login. On Steam
 
 ## Validation
 HV-S1 and HV-S2. HV-P1 for power under linger only.
+
+## Implementation (M3, 2026-11-16)
+`deckbeacon service install [--at-boot]`, `service boot on|off`, lifecycle announcements via logind, and boot detection. See `docs/agent-lifecycle.md` and `docs/milestones/M3-plan.md`. Hardware validation (HV-S1/S2, HV-P1/P3) is still pending.

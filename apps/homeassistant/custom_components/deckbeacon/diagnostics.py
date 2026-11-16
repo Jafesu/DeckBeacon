@@ -18,6 +18,7 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: DeckBea
         "entry": {k: entry.data.get(k) for k in (CONF_NAME, CONF_MODEL, CONF_VENDOR, CONF_METRIC_KEYS)},
         "connection": {
             "connected": rt.connected,
+            "power_state": rt.power_state,
             "transport": rt.transport,
             "last_seen": rt.last_seen.isoformat() if rt.last_seen else None,
             "connected_since": rt.connected_since.isoformat() if rt.connected_since else None,

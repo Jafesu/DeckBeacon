@@ -111,6 +111,8 @@ class DeviceRuntime:
         self.last_seen: datetime | None = None
         self.connected_since: datetime | None = None
         self.last_event_seq = 0
+        # Physical power state, distinct from connection state (spec 01 invariant).
+        self.power_state = "unknown"
         self._store: Store = Store(hass, 1, f"{DOMAIN}.events.{entry.entry_id}")
         self._supersedes: list[float] = []
 
@@ -144,6 +146,7 @@ class DeviceRuntime:
             await old.ws.close(code=CLOSE_SUPERSEDED, message=b"superseded by a newer session")
         self.channel = channel
         self.hello = hello
+        self.power_state = "on"  # it is talking to us
         self.transport = hello["session"]["transport"]
         self.connected_since = self.last_seen = datetime.now(UTC)
         self.notify()
@@ -152,6 +155,10 @@ class DeviceRuntime:
         if self.channel is channel:
             self.channel = None
             self.transport = None
+            # Keep an announced suspend/shutdown; an unannounced drop proves nothing
+            # about power (Wi-Fi loss, crash, HA restart...), so it becomes unknown.
+            if self.power_state not in ("suspended", "shutting_down"):
+                self.power_state = "unknown"
             self.notify()
 
     def touch(self) -> None:
@@ -175,6 +182,11 @@ class DeviceRuntime:
         if seq <= self.last_event_seq:
             return False
         self.last_event_seq = seq
+        if event["live"]:  # backfilled lifecycle events are history, not current state
+            new_state = _POWER_EVENTS.get(event["event_type"])
+            if new_state is not None and new_state != self.power_state:
+                self.power_state = new_state
+                self.notify()
         self._store.async_delay_save(lambda: {"last_event_seq": self.last_event_seq}, 1.0)
         self.hass.bus.async_fire(
             EVENT_DEVICE,
@@ -193,6 +205,14 @@ class DeviceRuntime:
 
     async def async_flush(self) -> None:
         await self._store.async_save({"last_event_seq": self.last_event_seq})
+
+
+_POWER_EVENTS = {
+    "device_suspending": "suspended",
+    "device_shutting_down": "shutting_down",
+    "device_resumed": "on",
+    "device_booted": "on",
+}
 
 
 class Hub:
@@ -456,7 +476,14 @@ class SessionView(_DeviceView):
                 try:
                     msg = await ch.recv(3 * HEARTBEAT_SECONDS)
                 except InvalidMessage as err:
-                    # Lenient receiver (COMPATIBILITY.md): unknown types get a non-fatal error.
+                    # Lenient receiver (COMPATIBILITY.md).
+                    seq = _unknown_event_seq(self.hub.validator, err.env)
+                    if seq is not None:
+                        # Event type from a newer agent: acknowledge so it is not resent, skip it.
+                        _LOGGER.info("ignoring unknown event type %r from %s", err.env["body"].get("event_type"), runtime.entry.title)
+                        runtime.touch()
+                        await ch.send("ack", {"ref_id": err.env["id"], "event_seq": seq})
+                        continue
                     if err.env.get("type") not in _KNOWN_TYPES and isinstance(err.env.get("id"), str):
                         await ch.send("error", {"error": {"code": "unsupported_type", "message": "unknown message type"}, "fatal": False})
                         continue
@@ -506,3 +533,14 @@ _KNOWN_TYPES = {
     "pair_complete",
     "pair_abort",
 }
+
+
+def _unknown_event_seq(validator: Draft202012Validator, env: dict[str, Any]) -> int | None:
+    """Return event_seq if env is a valid event except for an unknown event_type."""
+    body = env.get("body")
+    if env.get("type") != "event" or not isinstance(body, dict) or not isinstance(body.get("event_type"), str):
+        return None
+    probe = {**env, "body": {**body, "event_type": "capability_changed"}}
+    if any(True for _ in validator.iter_errors(probe)):
+        return None
+    return body["event_seq"]
