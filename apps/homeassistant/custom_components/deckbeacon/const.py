@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Final
 
 DOMAIN: Final = "deckbeacon"
-INTEGRATION_VERSION: Final = "0.1.0"
+# From manifest.json so the version sent to agents never drifts from releases.
+INTEGRATION_VERSION: Final = json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
 PROTOCOL_VERSION: Final = 1
 
 PATH_PAIR: Final = "/api/deckbeacon/v1/pair"
