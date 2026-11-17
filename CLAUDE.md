@@ -10,4 +10,4 @@ Project: DeckBeacon. Monorepo; planning complete, implementation only when expli
   - `cd packages/protocol/python && ruff check . && ruff format --check . && pytest`
   - `python3 scripts/check_fixtures.py packages/protocol/fixtures`
 - Never install anything on the owner's Home Assistant without explicit per-action approval. The HA connector cannot write to `custom_components/`, so the owner copies files.
-- No SteamOS hardware access yet. Use mocked providers and recorded fixtures, and leave capability rows at `research`.
+- SteamOS hardware: the owner's Dell G15 runs a Remote Control Claude session (reachable via send_message after owner approval). Read-only runs only unless the owner approves each change. Evidence goes to `docs/research/evidence/`. On SteamOS run local tests with `CGO_ENABLED=0` (stock gcc lacks `cc1`).

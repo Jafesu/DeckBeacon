@@ -19,9 +19,9 @@ deckbeacon service install [--at-boot] | uninstall | status | boot on|off   # se
 | `internal/pairing` | SAS pairing client |
 | `internal/session` | connection state machine, local-first failover, backoff, heartbeat, resume |
 | `internal/dispatch` | commands: dedupe, TTL, unsupported |
-| `internal/collect` | system telemetry under a configurable root (synthetic trees in `testdata/roots`) |
+| `internal/collect` | system telemetry under a configurable root (synthetic trees plus the recorded `dell-g15-5520` tree in `testdata/roots`). `fan.rpm` is the fastest fan. |
 | `internal/service` | systemd --user unit + opt-in lingering (never sudo) |
 | `internal/lifecycle` | logind sleep/shutdown with delay inhibitor; clock-jump resume fallback |
 | `internal/discovery` | mDNS legacy-unicast browse for `_home-assistant._tcp` |
 
-Testing: `go test -race ./...`. The `testdata/roots/*` trees are **synthetic** until replaced by real captures.
+Testing: `go test -race ./...` (CI). On SteamOS itself use `CGO_ENABLED=0 go test ./...`: stock SteamOS gcc lacks `cc1`, and godbus pulls in `os/user`, which needs cgo when it is enabled. The `testdata/roots/*` trees are **synthetic** until replaced by real captures.

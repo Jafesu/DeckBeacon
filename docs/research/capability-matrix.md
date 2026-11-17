@@ -129,3 +129,19 @@ Source: [`evidence/G15-capture-2026-11-17.md`](evidence/G15-capture-2026-11-17.m
 | mDNS | `avahi-daemon` active. | Agent's legacy-unicast browse coexists. Untested live. |
 | Steam library | 1 library, 37 manifests (tools/runtimes included). `BytesToDownload`/`BytesDownloaded` optional. Proton 9 Beta / 11 / Experimental. librarycache per-app directories. | Inputs for M6. |
 | Filesystem | Single btrfs subvolume (not the Steam Deck A/B layout). | HV-S2 (update survival) must be run separately for Deck and G15. |
+
+### Agent run on the G15 (2026-11-17, [`evidence/G15-agent-probe-2026-11-17.md`](evidence/G15-agent-probe-2026-11-17.md))
+The real `deckbeacon` binary (commit 673ce5d, built on the device) ran `probe` in Desktop Mode, idle and with a game (Castle Crashers on the RTX 3050). **Every system telemetry metric was available with live values.** Rows verified on this unit:
+
+| Metric | Source on G15 | Observed |
+|---|---|---|
+| cpu.usage | /proc/stat delta | 7–22 % |
+| memory, storage | /proc/meminfo, statfs /home | 30.8 %, 56.2 % |
+| battery.* , power.ac_online | power_supply BAT0 / AC | 100 %, full, 0 W on AC |
+| thermal.cpu_c | hwmon coretemp "Package id 0" | 53–56 °C |
+| gpu.busy, thermal.gpu_c | nvidia-smi (decimal temps parse) | 5–10 % idle → 14–31 % in game; 53.6–54.4 °C |
+| fan.rpm | hwmon alienware_wmi (max of 2 fans; 3 drivers agree) | 2134–2313 rpm (0 rpm only while stopped after boot) |
+| session.mode | process scan | desktop (correct, also while a game runs) |
+| lifecycle.* | logind on the system bus | sleep/shutdown notify + resume detect available, no polkit prompt |
+
+Still pending on this unit: Gaming Mode detection, battery discharge power, pairing/session with a real HA, lingering enable (HV-S1), suspend timing (HV-P3).
