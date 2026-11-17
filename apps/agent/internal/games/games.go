@@ -132,11 +132,10 @@ func (p *Provider) checkChanged() {
 			}
 		}
 	}
-	if p.dl != nil {
-		if d := p.dl.Active(); d != nil && d.Total > 0 {
-			// Coarse buckets: push live progress without a message every poll for noise.
-			fmt.Fprintf(&b, "L%d:%s:%d:%d|", d.AppID, d.Phase, d.Downloaded*1000/d.Total, int64(d.RateBps)/(1<<20))
-		}
+	if g := p.downloadGame(); g != nil && p.dl != nil {
+		// Coarse buckets: push live progress without a message on every poll.
+		d := p.dl.Live(g.AppID, snapshot(g))
+		fmt.Fprintf(&b, "L%d:%s:%d:%d|", d.AppID, d.Phase, d.Downloaded*1000/max(d.Total, 1), int64(d.RateBps)/(1<<20))
 	}
 	p.mu.Unlock()
 	if p.cfg.Activity != nil {
@@ -315,24 +314,7 @@ func (p *Provider) Metrics() []collect.Metric {
 	}
 	games, updates, shortcuts := p.lib.Counts()
 	out = append(out, m("library.games", games, "", ""), m("library.updates", updates, "", ""), m("library.shortcuts", shortcuts, "", ""))
-	var dl *steam.Game
-	for i := range p.lib.Games {
-		g := &p.lib.Games[i]
-		if inProgress(g.Status) && (dl == nil || g.Status == "downloading") {
-			dl = g
-		}
-	}
-	var live *steam.LiveDownload
-	if p.dl != nil {
-		live = p.dl.Active()
-	}
-	if live != nil {
-		if g := p.lib.Find(live.AppID); g != nil {
-			dl = g
-		} else {
-			live = nil // not (yet) in the library: fall back to the manifests
-		}
-	}
+	dl := p.downloadGame()
 	if dl == nil {
 		out = append(out, m("downloads.status", "idle", "", ""))
 		for _, k := range []string{"downloads.app_id", "downloads.name", "downloads.progress", "downloads.rate_bps", "downloads.eta_s"} {
@@ -340,8 +322,9 @@ func (p *Provider) Metrics() []collect.Metric {
 		}
 		return out
 	}
-	if live != nil {
-		return append(out, liveMetrics(m, live, dl.Name)...)
+	if p.dl != nil {
+		live := p.dl.Live(dl.AppID, snapshot(dl))
+		return append(out, liveMetrics(m, &live, dl.Name)...)
 	}
 	out = append(out, m("downloads.status", dl.Status, "", ""), m("downloads.app_id", dl.AppID, "", ""), m("downloads.name", dl.Name, "", ""))
 	if dl.BytesToDownload > 0 {
@@ -356,6 +339,33 @@ func (p *Provider) Metrics() []collect.Metric {
 	reason := "no live download data (Steam log not readable)"
 	out = append(out, m("downloads.rate_bps", nil, "B/s", reason), m("downloads.eta_s", nil, "s", reason))
 	return out
+}
+
+// downloadGame picks the download to report: the app Steam's log says it is
+// updating, else an in-progress manifest. Callers hold p.mu.
+func (p *Provider) downloadGame() *steam.Game {
+	if p.lib == nil {
+		return nil
+	}
+	if p.dl != nil {
+		if id := p.dl.ActiveApp(); id != 0 {
+			if g := p.lib.Find(id); g != nil {
+				return g
+			}
+		}
+	}
+	var dl *steam.Game
+	for i := range p.lib.Games {
+		g := &p.lib.Games[i]
+		if inProgress(g.Status) && (dl == nil || g.Status == "downloading") {
+			dl = g
+		}
+	}
+	return dl
+}
+
+func snapshot(g *steam.Game) steam.Snapshot {
+	return steam.Snapshot{Downloaded: g.BytesDownloaded, Total: g.BytesToDownload, Staged: g.BytesStaged, StageTotal: g.BytesToStage, Status: g.Status}
 }
 
 // liveMetrics reports a download tracked from Steam's log and disk writes

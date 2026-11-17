@@ -106,6 +106,8 @@ type Game struct {
 	Library         string    `json:"library"`
 	BytesToDownload uint64    `json:"-"`
 	BytesDownloaded uint64    `json:"-"`
+	BytesToStage    uint64    `json:"-"`
+	BytesStaged     uint64    `json:"-"`
 	installDir      string
 }
 
@@ -209,6 +211,7 @@ func Scan(steamRoot string) (*Library, error) {
 				SizeOnDisk: u64(a.Str("sizeondisk")), BuildID: a.Str("buildid"),
 				LastPlayed: unix(a.Str("lastplayed")), LastUpdated: unix(a.Str("lastupdated")), Library: f.ID,
 				BytesToDownload: u64(a.Str("bytestodownload")), BytesDownloaded: u64(a.Str("bytesdownloaded")),
+				BytesToStage: u64(a.Str("bytestostage")), BytesStaged: u64(a.Str("bytesstaged")),
 				installDir: a.Str("installdir"),
 			})
 		}

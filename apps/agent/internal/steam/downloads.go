@@ -13,12 +13,15 @@ import (
 // Steam keeps no live byte counter on disk: the appmanifest, the downloading/
 // tree and content_log carry exact byte counts only at events (start, sub-step,
 // pause, resume, completion). Live values are therefore assembled:
-//   - exact anchor: the `update started : download A/B, … stage C/D` line;
+//   - exact anchor: the `update started : download A/B, … stage C/D` line, or
+//     without one (agent started mid-download, line rotated away) the
+//     manifest's last snapshot;
 //   - live progress: Steam's own disk writes since the anchor (/proc/<pid>/io
 //     write_bytes, which stops the moment a download pauses), capped at D;
 //   - rate: the write_bytes rate scaled from staged to downloaded bytes, or
 //     Steam's `Current download rate: X Mbps` line (about once a minute);
-//   - state: `state changed` / `App update changed` / `scheduler finished`.
+//   - state: `state changed` / `App update changed` / `scheduler finished`,
+//     else inferred from whether Steam is writing at download speed.
 //
 // content_log also names LAN peers, CDN hosts with IPs and install paths: only
 // the anchored patterns below are matched, and only numbers and a fixed
@@ -26,18 +29,18 @@ import (
 
 var (
 	clTime     = regexp.MustCompile(`^\[(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\] `)
-	clStarted  = regexp.MustCompile(`^AppID (\d{1,10}) update started : download (\d{1,20})/(\d{1,20}), store \d+/\d+, reuse \d+/\d+, delta \d+/\d+, stage (\d{1,20})/(\d{1,20})$`)
+	clStarted  = regexp.MustCompile(`^AppID (\d{1,10}) update started : download (\d{1,20})/(\d{1,20}), store \d+/\d+, reuse \d+/\d+, delta \d+/\d+, stage (\d{1,20})/(\d{1,20})\s*$`)
 	clState    = regexp.MustCompile(`^AppID (\d{1,10}) state changed : ([A-Za-z ,()]{0,200})$`)
 	clApp      = regexp.MustCompile(`^AppID (\d{1,10}) App update changed : ([A-Za-z ,]{0,200})$`)
 	clRemoved  = regexp.MustCompile(`^AppID (\d{1,10}) scheduler finished : removed from schedule \(result No Error`)
-	clRate     = regexp.MustCompile(`^Current download rate: (\d{1,7}(?:\.\d{1,6})?) Mbps$`)
-	clIncrease = regexp.MustCompile(`^Increasing target number of download connections to \d+ \(rate was [\d.]+, now (\d{1,7}(?:\.\d{1,6})?)\)$`)
+	clRate     = regexp.MustCompile(`^Current download rate: (\d{1,7}(?:\.\d{1,6})?) Mbps\s*$`)
+	clIncrease = regexp.MustCompile(`^Increasing target number of download connections to \d+ \(rate was [\d.]+, now (\d{1,7}(?:\.\d{1,6})?)\)\s*$`)
 )
 
 // LiveDownload is the tracked state of one app's download.
 type LiveDownload struct {
 	AppID      uint32
-	Phase      string // downloading | paused | installing | verifying | updating | done
+	Phase      string // downloading | paused | installing | verifying | updating | manifest status
 	Downloaded uint64 // estimated live, exact at anchors
 	Total      uint64
 	Staged     uint64
@@ -49,6 +52,15 @@ type LiveDownload struct {
 	anchorWrite      uint64
 	anchorOK         bool
 	anchorDownloaded uint64
+	phaseKnown       bool // phase came from a log line
+	seeded           bool // anchor came from the manifest, not the log
+	seedDownloaded   uint64
+}
+
+// Snapshot is the appmanifest's last exact byte counts for an app.
+type Snapshot struct {
+	Downloaded, Total, Staged, StageTotal uint64
+	Status                                string // from StateFlags
 }
 
 // DownloadTracker follows content_log.txt and Steam's write counter.
@@ -62,6 +74,7 @@ type DownloadTracker struct {
 	lastAt    time.Time
 	writeOK   bool
 	ioRate    float64 // smoothed Steam write bytes/s
+	started   bool
 	now       func() time.Time
 }
 
@@ -74,7 +87,14 @@ func NewDownloadTracker(steamRoot string, now func() time.Time) *DownloadTracker
 }
 
 // Poll consumes new log lines, then folds in Steam's current write counter.
+// On the first poll the end of the rotated content_log.previous.txt is read
+// first, so a download that started before the last rotation is still known.
 func (t *DownloadTracker) Poll(steamWrite uint64, writeOK bool) {
+	if !t.started {
+		t.started = true
+		prev := logTail{path: strings.TrimSuffix(t.tail.path, ".txt") + ".previous.txt", initial: t.tail.initial}
+		prev.poll(t.line)
+	}
 	t.tail.poll(t.line)
 	t.sample(steamWrite, writeOK)
 }
@@ -82,48 +102,51 @@ func (t *DownloadTracker) Poll(steamWrite uint64, writeOK bool) {
 func (t *DownloadTracker) app(id uint32) *LiveDownload {
 	d := t.apps[id]
 	if d == nil {
-		d = &LiveDownload{AppID: id, Phase: "updating"}
+		d = &LiveDownload{AppID: id}
 		t.apps[id] = d
 	}
 	return d
 }
 
-func atoi(b []byte) uint64 { v, _ := strconv.ParseUint(string(b), 10, 64); return v }
+func atoi(s string) uint64 { v, _ := strconv.ParseUint(s, 10, 64); return v }
 
 func (t *DownloadTracker) line(raw []byte) {
-	s := strings.TrimRight(string(raw), "\r")
-	at := t.now()
-	if m := clTime.FindStringSubmatch(s); m != nil {
-		if ts, err := time.ParseInLocation("2006-01-02 15:04:05", m[1], time.Local); err == nil {
-			at = ts
-		}
-		s = s[len(m[0]):]
-	} else {
+	// Real content_log lines end in CRLF, and the `update started` line also
+	// has a space before the CR (G15, `cat -A`): trim all trailing whitespace.
+	s := strings.TrimRight(string(raw), " \t\r")
+	m := clTime.FindStringSubmatch(s)
+	if m == nil {
 		return
 	}
+	at := t.now()
+	if ts, err := time.ParseInLocation("2006-01-02 15:04:05", m[1], time.Local); err == nil {
+		at = ts
+	}
+	s = s[len(m[0]):]
 	if m := clStarted.FindStringSubmatch(s); m != nil {
-		d := t.app(uint32(atoi([]byte(m[1]))))
-		done, total, staged, stageTotal := atoi([]byte(m[2])), atoi([]byte(m[3])), atoi([]byte(m[4])), atoi([]byte(m[5]))
+		d := t.app(uint32(atoi(m[1])))
+		done, total, staged, stageTotal := atoi(m[2]), atoi(m[3]), atoi(m[4]), atoi(m[5])
 		// Small sub-steps (preload, 64-byte steps) run inside one update: keep
 		// the largest total as the progress basis (§13.3/§13.5).
-		if total == 0 || total < d.Total {
+		if total == 0 || (!d.seeded && total < d.Total) {
 			return
 		}
 		d.Downloaded, d.Total, d.Staged, d.StageTotal, d.Estimated = done, total, staged, stageTotal, false
-		d.anchorDownloaded = done
+		d.anchorDownloaded, d.seeded = done, false
 		d.anchorWrite, d.anchorOK = t.lastWrite, t.writeOK
 		t.active = d.AppID
 		return
 	}
 	if m := clState.FindStringSubmatch(s); m != nil {
-		id := uint32(atoi([]byte(m[1])))
-		flags := m[2]
+		id, flags := uint32(atoi(m[1])), m[2]
 		switch {
 		case strings.Contains(flags, "(Suspended)"):
-			t.app(id).Phase = "paused"
+			d := t.app(id)
+			d.Phase, d.phaseKnown = "paused", true
+			t.active = id
 		case strings.Contains(flags, "Update Running"):
-			if d := t.app(id); d.Phase == "paused" || d.Phase == "done" {
-				d.Phase = "updating"
+			if d := t.app(id); !d.phaseKnown || d.Phase == "paused" {
+				d.Phase, d.phaseKnown = "updating", true
 			}
 			t.active = id
 		case strings.HasPrefix(flags, "Fully Installed,") && !strings.Contains(flags, "Update"):
@@ -132,27 +155,22 @@ func (t *DownloadTracker) line(raw []byte) {
 		return
 	}
 	if m := clApp.FindStringSubmatch(s); m != nil {
-		id := uint32(atoi([]byte(m[1])))
-		d, ok := t.apps[id]
-		if !ok {
-			return
-		}
-		ph := m[2]
+		d, ph := t.app(uint32(atoi(m[1]))), m[2]
 		switch {
-		case d.Phase == "paused":
+		case d.Phase == "paused" && d.phaseKnown: // "Stopping"/"None" after a pause
 		case strings.Contains(ph, "Committing"):
-			d.Phase = "installing"
+			d.Phase, d.phaseKnown = "installing", true
 		case strings.Contains(ph, "Downloading"):
-			d.Phase = "downloading"
+			d.Phase, d.phaseKnown = "downloading", true
 		case strings.Contains(ph, "Verifying"):
-			d.Phase = "verifying"
+			d.Phase, d.phaseKnown = "verifying", true
 		case strings.Contains(ph, "Running Update"):
-			d.Phase = "updating"
+			d.Phase, d.phaseKnown = "updating", true
 		}
 		return
 	}
 	if m := clRemoved.FindStringSubmatch(s); m != nil {
-		t.finish(uint32(atoi([]byte(m[1]))))
+		t.finish(uint32(atoi(m[1])))
 		return
 	}
 	if m := clRate.FindStringSubmatch(s); m != nil {
@@ -182,15 +200,15 @@ func (t *DownloadTracker) finish(id uint32) {
 func (t *DownloadTracker) sample(write uint64, ok bool) {
 	now := t.now()
 	if ok && t.writeOK && write >= t.lastWrite {
-		if dt := now.Sub(t.lastAt).Seconds(); dt >= 1 {
-			inst := float64(write-t.lastWrite) / dt
-			if t.ioRate == 0 {
-				t.ioRate = inst
-			} else {
-				t.ioRate = 0.5*t.ioRate + 0.5*inst
-			}
-		} else {
+		dt := now.Sub(t.lastAt).Seconds()
+		if dt < 1 {
 			return // too soon: keep the previous base so dt grows
+		}
+		inst := float64(write-t.lastWrite) / dt
+		if t.ioRate == 0 {
+			t.ioRate = inst
+		} else {
+			t.ioRate = 0.5*t.ioRate + 0.5*inst
 		}
 	} else {
 		t.ioRate = 0 // first sample, counter reset (Steam restarted) or unreadable
@@ -199,41 +217,62 @@ func (t *DownloadTracker) sample(write uint64, ok bool) {
 		}
 	}
 	t.lastWrite, t.lastAt, t.writeOK = write, now, ok
-	d := t.apps[t.active]
-	if d == nil {
-		return
+	if ok { // anchors read before the counter was available start from here
+		for _, d := range t.apps {
+			if !d.anchorOK && d.Total > 0 {
+				d.anchorWrite, d.anchorOK = write, true
+			}
+		}
 	}
-	if !d.anchorOK && ok { // anchor seen before the first counter sample
-		d.anchorWrite, d.anchorOK = write, true
+}
+
+// ActiveApp is the app Steam's log says it is updating (0 = none known).
+func (t *DownloadTracker) ActiveApp() uint32 { return t.active }
+
+// writesFlowing means Steam is writing at download-like speed (> 1 MiB/s).
+func (t *DownloadTracker) writesFlowing() bool { return t.writeOK && t.ioRate > 1<<20 }
+
+// Live combines the log's exact anchor (or, without one, the manifest's last
+// snapshot) with Steam's disk writes since then.
+func (t *DownloadTracker) Live(appID uint32, man Snapshot) LiveDownload {
+	d := t.app(appID)
+	reseed := d.seeded && man.Total > 0 && (man.Downloaded != d.seedDownloaded || man.Total != d.Total)
+	if (d.Total == 0 || reseed) && man.Total > 0 { // no log anchor, or a newer manifest write
+		d.Downloaded, d.Total, d.Staged, d.StageTotal = man.Downloaded, man.Total, man.Staged, man.StageTotal
+		d.anchorDownloaded, d.seedDownloaded, d.seeded, d.Estimated = man.Downloaded, man.Downloaded, true, false
+		d.anchorWrite, d.anchorOK = t.lastWrite, t.writeOK
 	}
-	if d.Phase == "downloading" && d.anchorOK && d.StageTotal > 0 && write > d.anchorWrite {
-		// Steam's writes are staged (decompressed) bytes: advance from the exact
-		// anchor by the written bytes, mapped to download bytes by the update's
+	if !d.anchorOK && t.writeOK { // anchor taken before the first counter sample
+		d.anchorWrite, d.anchorOK = t.lastWrite, true
+	}
+	if !d.phaseKnown {
+		// No phase line seen: writes at download speed mean downloading;
+		// otherwise keep the manifest's status (it cannot show paused, §13.1).
+		if t.writesFlowing() {
+			d.Phase = "downloading"
+		} else {
+			d.Phase = man.Status
+		}
+	}
+	if d.Phase == "downloading" && d.anchorOK && d.StageTotal > 0 && t.lastWrite > d.anchorWrite {
+		// Steam's writes are staged (decompressed) bytes: advance from the anchor
+		// by the bytes written, mapped to download bytes by the update's
 		// download/stage ratio. At the anchor itself the exact counts stand.
 		ratio := float64(d.Total) / float64(d.StageTotal)
-		extra := uint64(float64(min(write-d.anchorWrite, d.StageTotal-min(d.Staged, d.StageTotal))) * ratio)
+		extra := uint64(float64(min(t.lastWrite-d.anchorWrite, d.StageTotal-min(d.Staged, d.StageTotal))) * ratio)
 		d.Downloaded = min(d.Total, d.anchorDownloaded+extra)
 		d.Estimated = true
 	}
 	switch {
 	case d.Phase != "downloading":
 		d.RateBps, d.RateSource = 0, ""
-	case ok && t.ioRate > 0 && d.StageTotal > 0:
+	case t.writeOK && t.ioRate > 0 && d.StageTotal > 0:
 		d.RateBps = t.ioRate * float64(d.Total) / float64(d.StageTotal)
 		d.RateSource = "steam disk writes (/proc io)"
-	case now.Sub(t.logRateAt) < 90*time.Second && t.logRate > 0:
+	case t.now().Sub(t.logRateAt) < 90*time.Second && t.logRate > 0:
 		d.RateBps, d.RateSource = t.logRate, "steam content_log rate"
 	default:
 		d.RateBps, d.RateSource = 0, ""
 	}
-}
-
-// Active returns the download Steam is working on (running or paused), if any.
-func (t *DownloadTracker) Active() *LiveDownload {
-	d := t.apps[t.active]
-	if d == nil || d.Total == 0 {
-		return nil
-	}
-	c := *d
-	return &c
+	return *d
 }

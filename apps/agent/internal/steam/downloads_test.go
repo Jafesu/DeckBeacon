@@ -54,7 +54,7 @@ func TestDownloadTrackerRecordedSequence(t *testing.T) {
 	step := func(text string, adv time.Duration, wrote uint64) {
 		if text != "" {
 			f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
-			_, _ = f.WriteString(text)
+			_, _ = f.WriteString(realLineEndings(text))
 			_ = f.Close()
 		}
 		clock = clock.Add(adv)
@@ -62,14 +62,15 @@ func TestDownloadTrackerRecordedSequence(t *testing.T) {
 		tr.Poll(write, true)
 	}
 	step(recordedStart, 0, 0)
-	d := tr.Active()
-	if d == nil || d.AppID != 271590 || d.Total != 124602905312 || d.Downloaded != 87346528 || d.Phase != "downloading" {
+	live := func() LiveDownload { return tr.Live(271590, Snapshot{Status: "updating"}) }
+	d := live()
+	if d.AppID != 271590 || d.Total != 124602905312 || d.Downloaded != 87346528 || d.Phase != "downloading" {
 		t.Fatalf("anchor after sub-steps: %+v", d)
 	}
 	// 3 s at Steam's measured 53.5 MB/s staged write rate (§13.4).
 	step("", 3*time.Second, 160_500_000)
 	step("", 3*time.Second, 160_500_000)
-	d = tr.Active()
+	d = live()
 	if !d.Estimated || d.Downloaded <= 87346528 {
 		t.Fatalf("live progress must advance from disk writes: %+v", d)
 	}
@@ -77,15 +78,15 @@ func TestDownloadTrackerRecordedSequence(t *testing.T) {
 		t.Fatalf("rate %.1f Mbps, want about 413 (download bytes = staged / 1.036)", mbps)
 	}
 	step(recordedPause, 3*time.Second, 1_000_000)
-	if d = tr.Active(); d.Phase != "paused" || d.RateBps != 0 {
+	if d = live(); d.Phase != "paused" || d.RateBps != 0 {
 		t.Fatalf("pause: %+v", d)
 	}
 	step(recordedResume, 3*time.Second, 0)
-	if d = tr.Active(); d.Phase != "downloading" || d.Downloaded != 4464269120 || d.Estimated {
+	if d = live(); d.Phase != "downloading" || d.Downloaded != 4464269120 || d.Estimated {
 		t.Fatalf("resume re-anchors on the exact counts: %+v", d)
 	}
 	step(recordedDone, 3*time.Second, 0)
-	if tr.Active() != nil {
+	if tr.ActiveApp() != 0 {
 		t.Fatal("finished download must clear")
 	}
 	if dump := strings.Join([]string{string(tr.tail.rest)}, ""); strings.Contains(dump, "CANARY") {
@@ -100,13 +101,13 @@ func TestDownloadTrackerLogRateFallback(t *testing.T) {
 	clock := time.Date(2026, 11, 16, 21, 7, 30, 0, time.Local)
 	tr := NewDownloadTracker(root, func() time.Time { return clock })
 	tr.Poll(0, false) // /proc/<steam>/io unreadable
-	d := tr.Active()
-	if d == nil || d.RateSource != "steam content_log rate" || int(d.RateBps*8/1e6) != 315 {
+	d := tr.Live(271590, Snapshot{})
+	if d.RateSource != "steam content_log rate" || int(d.RateBps*8/1e6) != 315 {
 		t.Fatalf("fallback rate: %+v", d)
 	}
 	clock = clock.Add(5 * time.Minute) // stale rate line
 	tr.Poll(0, false)
-	if d := tr.Active(); d.RateBps != 0 {
+	if d := tr.Live(271590, Snapshot{}); d.RateBps != 0 {
 		t.Fatalf("stale rate must not be shown: %+v", d)
 	}
 }
@@ -125,4 +126,75 @@ func TestReadIOPicksSteamClient(t *testing.T) {
 	if !p.SteamWriteOK || p.SteamWrite != 777 {
 		t.Fatalf("got %d %v", p.SteamWrite, p.SteamWriteOK)
 	}
+}
+
+// G15 hardware run: the agent was restarted mid-download, the log held no
+// "update started" line for the app, and pausing changed nothing. Now the
+// manifest seeds the anchor, writes give speed and progress, and a pause line
+// applies even without an anchor.
+func TestDownloadTrackerMidDownloadWithoutLogAnchor(t *testing.T) {
+	root := t.TempDir()
+	logs := filepath.Join(root, "logs")
+	_ = os.MkdirAll(logs, 0o755)
+	path := filepath.Join(logs, "content_log.txt")
+	_ = os.WriteFile(path, []byte("[2026-11-16 21:40:00] unrelated line\n"), 0o644)
+	clock := time.Date(2026, 11, 17, 4, 0, 0, 0, time.UTC)
+	tr := NewDownloadTracker(root, func() time.Time { return clock })
+	// Manifest last written at the previous pause/resume: 70.5 % of 124.6 GB.
+	man := Snapshot{Downloaded: 87_844_948_000, Total: 124_602_905_312, Staged: 91_000_000_000, StageTotal: 129_095_667_634, Status: "updating"}
+	w := uint64(500_000_000_000)
+	tr.Poll(w, true)
+	if d := tr.Live(271590, man); d.Phase != "updating" || d.RateBps != 0 {
+		t.Fatalf("before writes flow: %+v", d)
+	}
+	for i := 0; i < 3; i++ { // ~37.5 MB/s staged (300 Mbps)
+		clock = clock.Add(2 * time.Second)
+		w += 75_000_000
+		tr.Poll(w, true)
+	}
+	d := tr.Live(271590, man)
+	if d.Phase != "downloading" || d.Downloaded <= man.Downloaded || !d.Estimated {
+		t.Fatalf("seeded live progress: %+v", d)
+	}
+	if mbps := d.RateBps * 8 / 1e6; mbps < 270 || mbps > 310 {
+		t.Fatalf("rate %.0f Mbps", mbps)
+	}
+	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	_, _ = f.WriteString("[2026-11-16 22:00:00] AppID 271590 state changed : Update Required,Update Queued,Update Started, (Suspended)\n")
+	_ = f.Close()
+	clock = clock.Add(2 * time.Second)
+	tr.Poll(w, true)
+	if d := tr.Live(271590, man); d.Phase != "paused" || d.RateBps != 0 || tr.ActiveApp() != 271590 {
+		t.Fatalf("pause without an anchor: %+v", d)
+	}
+}
+
+func TestDownloadTrackerReadsRotatedLogAtStart(t *testing.T) {
+	root := t.TempDir()
+	logs := filepath.Join(root, "logs")
+	_ = os.MkdirAll(logs, 0o755)
+	_ = os.WriteFile(filepath.Join(logs, "content_log.previous.txt"), []byte(recordedStart), 0o644)
+	_ = os.WriteFile(filepath.Join(logs, "content_log.txt"), []byte("[2026-11-16 21:30:00] Current download rate: 300.0 Mbps\n"), 0o644)
+	tr := NewDownloadTracker(root, nil)
+	tr.Poll(0, false)
+	if d := tr.Live(271590, Snapshot{}); tr.ActiveApp() != 271590 || d.Total != 124602905312 || d.Phase != "downloading" {
+		t.Fatalf("anchor from rotated log: %+v", d)
+	}
+}
+
+// realLineEndings reproduces the G15's bytes: CRLF everywhere, plus a space
+// before the CR on `update started` lines (`... stage C/D ^M$` in cat -A).
+func realLineEndings(text string) string {
+	var b strings.Builder
+	for _, l := range strings.SplitAfter(text, "\n") {
+		if l == "" {
+			continue
+		}
+		l = strings.TrimSuffix(l, "\n")
+		if strings.Contains(l, " update started : ") {
+			l += " "
+		}
+		b.WriteString(l + "\r\n")
+	}
+	return b.String()
 }
