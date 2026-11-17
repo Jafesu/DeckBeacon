@@ -66,3 +66,24 @@ Facts that drive the decisions:
 - HA: three sensors; `list_games` includes shortcuts.
 - Tests: canary `Exe`/`LaunchOptions`/`tags` values never leave the parser or reach a library page. Every recorded ID form for all 8 G15 shortcuts is covered. Tailer tests cover rotation, truncation and partial lines. The process scan uses the recorded launch-client and supervisor shapes.
 - Still open: the G15 hardware checks listed under Validation.
+
+## Amendment 1 (2026-11-17): live downloads from content_log and Steam's disk writes
+Context: on the G15, the owner saw no download speed or time remaining, and progress stuck at 3.4%. Discovery §13 showed that the appmanifest, the `downloading/` tree and content_log carry exact byte counts **only at events**. Steam's own `/proc/<pid>/io` `write_bytes` follows a download live and stops at pause. `Current download rate: X Mbps` (logged about once a minute) matches the Steam UI.
+
+D1 changes: **content_log.txt is now read**, under the same rule as the UI-mode tailer. Only anchored patterns are matched:
+- `AppID N update started : download A/B, … stage C/D`
+- `AppID N state changed : <flags>`
+- `AppID N App update changed : <phases>`
+- `AppID N scheduler finished : removed from schedule (result No Error`
+- `Current download rate: X Mbps`
+- `Increasing target number of download connections … now X`
+
+From those lines only numbers and fixed-vocabulary words are kept. Peer hostnames, CDN hosts, IPs, commit paths and `stats:` lines are never matched or stored (tests use canary values).
+
+- **Progress:** the exact anchor from the `update started` line with the largest total (sub-steps ignored), then advanced by Steam's `write_bytes` since the anchor, mapped by the download/stage ratio. Marked `confidence: heuristic` until the next exact anchor.
+- **Speed:** the smoothed `write_bytes` rate converted to download bytes. Fallback: the logged rate while it is under 90 s old.
+- **Time remaining:** (total − progress) / speed, only while downloading.
+- **State:** downloading, paused, installing, verifying or updating, from state lines. This also fixes "paused", which StateFlags can't show (1026 both ways).
+- The Steam process is the `steam` with the largest `wchar` (same user, no privileges).
+
+Not yet captured on hardware: completion of a large download, cancellation, and a download in Gaming Mode (§13 open items).

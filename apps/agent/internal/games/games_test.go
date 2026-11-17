@@ -3,6 +3,7 @@ package games
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -238,5 +239,40 @@ func TestChangedSignalsOnGameStartAndStop(t *testing.T) {
 	case <-p.Changed():
 	default:
 		t.Fatal("game stop must signal")
+	}
+}
+
+func TestLiveDownloadMetrics(t *testing.T) {
+	sr, proc := fixture(t)
+	clock := time.Date(2026, 11, 17, 3, 0, 0, 0, time.UTC)
+	p := New(Config{SteamRoot: sr, ProcRoot: proc, Now: func() time.Time { return clock }})
+	_ = os.WriteFile(filepath.Join(sr, "logs", "content_log.txt"), []byte(
+		"[2026-11-16 21:00:00] AppID 1716740 state changed : Update Required,Update Queued,Update Running,\n"+
+			"[2026-11-16 21:00:01] AppID 1716740 update started : download 1000000000/10000000000, store 0/0, reuse 0/0, delta 0/0, stage 1000000000/10000000000\n"+
+			"[2026-11-16 21:00:01] AppID 1716740 App update changed : Running Update,Downloading,Staging,\n"), 0o644)
+	io := func(wb uint64) {
+		_ = os.MkdirAll(filepath.Join(proc, "6225"), 0o755)
+		_ = os.WriteFile(filepath.Join(proc, "6225", "comm"), []byte("steam\n"), 0o644)
+		_ = os.WriteFile(filepath.Join(proc, "6225", "io"), []byte(fmt.Sprintf("wchar: %d\nwrite_bytes: %d\n", wb, wb)), 0o644)
+	}
+	io(0)
+	p.scan(true)
+	p.poll()
+	for i := 1; i <= 3; i++ {
+		clock = clock.Add(2 * time.Second)
+		io(uint64(i) * 100_000_000) // 50 MB/s
+		p.poll()
+	}
+	if metric(p, "downloads.status") != "downloading" || metric(p, "downloads.name") != "Starfield" {
+		t.Fatalf("status %v %v", metric(p, "downloads.status"), metric(p, "downloads.name"))
+	}
+	if pr := metric(p, "downloads.progress").(float64); pr != 13 {
+		t.Fatalf("progress %v, want 13 (1 GB exact + 300 MB written of 10 GB)", pr)
+	}
+	if r := metric(p, "downloads.rate_bps").(int64); r < 45_000_000 || r > 55_000_000 {
+		t.Fatalf("rate %v", r)
+	}
+	if eta := metric(p, "downloads.eta_s").(int64); eta < 150 || eta > 200 {
+		t.Fatalf("eta %v (8.7 GB at 50 MB/s)", eta)
 	}
 }

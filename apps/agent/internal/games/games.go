@@ -62,6 +62,7 @@ type Provider struct {
 	prevStat map[uint32]string
 	scanErr  error
 	uiMode   *steam.UIModeWatcher
+	dl       *steam.DownloadTracker
 	session  string
 	changed  chan struct{}
 	lastFP   string
@@ -90,6 +91,7 @@ func New(cfg Config) *Provider {
 	p := &Provider{cfg: cfg, tracker: steam.NewTracker(), events: make(chan Event, 64), prevStat: map[uint32]string{}, session: "unknown", changed: make(chan struct{}, 1)}
 	if cfg.SteamRoot != "" {
 		p.uiMode = steam.NewUIModeWatcher(cfg.SteamRoot)
+		p.dl = steam.NewDownloadTracker(cfg.SteamRoot, cfg.Now)
 	}
 	return p
 }
@@ -129,6 +131,12 @@ func (p *Provider) checkChanged() {
 			if inProgress(g.Status) || g.Status == "update_required" {
 				fmt.Fprintf(&b, "d%d:%s:%d|", g.AppID, g.Status, g.BytesDownloaded)
 			}
+		}
+	}
+	if p.dl != nil {
+		if d := p.dl.Active(); d != nil && d.Total > 0 {
+			// Coarse buckets: push live progress without a message every poll for noise.
+			fmt.Fprintf(&b, "L%d:%s:%d:%d|", d.AppID, d.Phase, d.Downloaded*1000/d.Total, int64(d.RateBps)/(1<<20))
 		}
 	}
 	p.mu.Unlock()
@@ -249,6 +257,9 @@ func (p *Provider) poll() {
 	if p.uiMode != nil {
 		p.uiMode.Poll()
 	}
+	if p.dl != nil {
+		p.dl.Poll(procs.SteamWrite, procs.SteamWriteOK)
+	}
 	p.mu.Unlock()
 	for _, c := range changes {
 		data := map[string]any{"app_id": c.Session.AppID, "name": c.Session.Name, "started_at": c.Session.Started.Format(time.RFC3339)}
@@ -312,6 +323,17 @@ func (p *Provider) Metrics() []collect.Metric {
 			dl = g
 		}
 	}
+	var live *steam.LiveDownload
+	if p.dl != nil {
+		live = p.dl.Active()
+	}
+	if live != nil {
+		if g := p.lib.Find(live.AppID); g != nil {
+			dl = g
+		} else {
+			live = nil // not (yet) in the library: fall back to the manifests
+		}
+	}
 	if dl == nil {
 		out = append(out, m("downloads.status", "idle", "", ""))
 		for _, k := range []string{"downloads.app_id", "downloads.name", "downloads.progress", "downloads.rate_bps", "downloads.eta_s"} {
@@ -319,6 +341,9 @@ func (p *Provider) Metrics() []collect.Metric {
 		}
 		p.rate = steam.DownloadRate{}
 		return out
+	}
+	if live != nil {
+		return append(out, liveMetrics(m, live, dl.Name)...)
 	}
 	out = append(out, m("downloads.status", dl.Status, "", ""), m("downloads.app_id", dl.AppID, "", ""), m("downloads.name", dl.Name, "", ""))
 	if dl.BytesToDownload > 0 {
@@ -333,6 +358,39 @@ func (p *Provider) Metrics() []collect.Metric {
 		remaining := float64(dl.BytesToDownload - min(dl.BytesDownloaded, dl.BytesToDownload))
 		out = append(out, m("downloads.eta_s", int64(remaining/rate), "s", ""))
 	} else {
+		out = append(out, m("downloads.rate_bps", nil, "B/s", "measuring"), m("downloads.eta_s", nil, "s", "measuring"))
+	}
+	return out
+}
+
+// liveMetrics reports a download tracked from Steam's log and disk writes
+// (G15 discovery §13): exact at events, estimated in between.
+func liveMetrics(m func(string, any, string, string) collect.Metric, d *steam.LiveDownload, name string) []collect.Metric {
+	src := "steam content_log + disk writes"
+	est := func(x collect.Metric) collect.Metric {
+		if x.Value != nil {
+			x.Source = src
+			if d.Estimated {
+				x.Confidence = "heuristic"
+			}
+		}
+		return x
+	}
+	out := []collect.Metric{m("downloads.status", d.Phase, "", ""), m("downloads.app_id", d.AppID, "", ""), m("downloads.name", name, "", "")}
+	out[0].Source = src
+	pct := math.Round(1000*float64(d.Downloaded)/float64(d.Total)) / 10
+	out = append(out, est(m("downloads.progress", pct, "%", "")))
+	switch {
+	case d.Phase == "paused":
+		out = append(out, m("downloads.rate_bps", nil, "B/s", "paused"), m("downloads.eta_s", nil, "s", "paused"))
+	case d.RateBps > 0:
+		r := m("downloads.rate_bps", int64(d.RateBps), "B/s", "")
+		r.Source, r.Confidence = d.RateSource, "heuristic"
+		out = append(out, r)
+		eta := m("downloads.eta_s", int64(float64(d.Total-min(d.Downloaded, d.Total))/d.RateBps), "s", "")
+		eta.Source, eta.Confidence = src, "heuristic"
+		out = append(out, eta)
+	default:
 		out = append(out, m("downloads.rate_bps", nil, "B/s", "measuring"), m("downloads.eta_s", nil, "s", "measuring"))
 	}
 	return out

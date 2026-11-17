@@ -20,6 +20,11 @@ type Procs struct {
 	Running []Running
 	// Session is "gaming" (gamescope, no Plasma), "desktop" (Plasma) or "unknown".
 	Session string
+	// SteamWrite is write_bytes of the Steam client process (the "steam" with the
+	// largest wchar; several processes share the name, G15 §13). It follows a
+	// download live. SteamWriteOK is false when Steam is not running.
+	SteamWrite   uint64
+	SteamWriteOK bool
 }
 
 // RunningApps returns only the app ids (see ScanProcs).
@@ -43,10 +48,16 @@ func ScanProcs(procRoot string) Procs {
 	dirs, _ := filepath.Glob(filepath.Join(procRoot, "[0-9]*"))
 	byID := map[uint32]Running{}
 	gamescope, plasma := false, false
+	var bestWchar uint64
+	out := Procs{Session: "unknown"}
 	for _, d := range dirs {
 		if comm, err := os.ReadFile(filepath.Join(d, "comm")); err == nil {
 			c := strings.TrimSpace(string(comm))
 			switch {
+			case c == "steam":
+				if wchar, wb, ok := readIO(filepath.Join(d, "io")); ok && (!out.SteamWriteOK || wchar > bestWchar) {
+					bestWchar, out.SteamWrite, out.SteamWriteOK = wchar, wb, true
+				}
 			case strings.HasPrefix(c, "gamescope"):
 				gamescope = true
 			case c == "plasmashell" || c == "kwin_wayland" || c == "kwin_x11":
@@ -82,7 +93,6 @@ func ScanProcs(procRoot string) Procs {
 		}
 		byID[id] = Running{AppID: id, Exe: exeName(args, sep)}
 	}
-	out := Procs{Session: "unknown"}
 	switch {
 	case plasma:
 		out.Session = "desktop"
@@ -118,4 +128,31 @@ func exeName(args []string, sep int) string {
 		return capText(base, 64)
 	}
 	return ""
+}
+
+// readIO parses wchar and write_bytes from /proc/<pid>/io (readable for the
+// agent's own user only, which is also Steam's user).
+func readIO(path string) (wchar, writeBytes uint64, ok bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	var gotW, gotB bool
+	for _, l := range strings.Split(string(b), "\n") {
+		k, v, found := strings.Cut(l, ":")
+		if !found {
+			continue
+		}
+		n, err := strconv.ParseUint(strings.TrimSpace(v), 10, 64)
+		if err != nil {
+			continue
+		}
+		switch k {
+		case "wchar":
+			wchar, gotW = n, true
+		case "write_bytes":
+			writeBytes, gotB = n, true
+		}
+	}
+	return wchar, writeBytes, gotW && gotB
 }
