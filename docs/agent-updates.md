@@ -3,7 +3,7 @@
 DeckBeacon's agent updates itself only with your approval (ADR-0010). The Home Assistant integration and the dashboard cards update separately through the HA Marketplace.
 
 ## How it works
-1. **Check:** every 6 hours (and at start) the agent looks at the DeckBeacon releases on GitHub for its channel. It downloads only the small signed manifest, verifies the signature against the key built into the agent, and checks compatibility with your HA integration.
+1. **Check:** every 30 minutes (±10 %), at start, when the channel changes, and on every new connection to HA if the last check is over 10 minutes old, the agent looks at the DeckBeacon releases on GitHub for its channel. To check right away, reload the DeckBeacon integration in HA. An unchanged release list is a conditional request (ETag), so it costs nothing against GitHub's anonymous rate limit. It downloads only the small signed manifest, verifies the signature against the key built into the agent, and checks compatibility with your HA integration.
 2. **Offer:** Home Assistant shows **Update available** on the device's "Agent" update entity, with a link to the release notes.
 3. **Approve:** press **Install**. Nothing is ever installed without this, and the approval names that exact version. It is remembered for 7 days if the device can't apply it straight away.
 4. **Wait for a safe moment:** the agent waits while a game is running or Steam is downloading. The update entity shows why it is waiting.

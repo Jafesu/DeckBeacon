@@ -252,6 +252,7 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 				OnWelcome: func(integrationVersion, channel string) {
 					integration.Store(integrationVersion)
 					upd.SetChannel(channel)
+					upd.CheckIfStale(10 * time.Minute) // a reload in HA works as "check now"
 				},
 			})
 			if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,10 +36,11 @@ type relSpec struct {
 // releaseServer serves a GitHub-style release list plus assets over TLS.
 type releaseServer struct {
 	*httptest.Server
-	mu     sync.Mutex
-	files  map[string][]byte
-	list   []ghRelease
-	served map[string]int
+	mu          sync.Mutex
+	files       map[string][]byte
+	list        []ghRelease
+	served      map[string]int
+	notModified int
 }
 
 func newReleaseServer(t *testing.T, priv ed25519.PrivateKey, specs ...relSpec) *releaseServer {
@@ -49,7 +51,15 @@ func newReleaseServer(t *testing.T, priv ed25519.PrivateKey, specs ...relSpec) *
 		defer rs.mu.Unlock()
 		rs.served[r.URL.Path]++
 		if r.URL.Path == "/releases" {
-			_ = json.NewEncoder(w).Encode(rs.list)
+			body, _ := json.Marshal(rs.list)
+			etag := fmt.Sprintf(`"%x"`, sha256.Sum256(body))
+			if r.Header.Get("If-None-Match") == etag {
+				rs.notModified++
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+			w.Header().Set("ETag", etag)
+			_, _ = w.Write(body)
 			return
 		}
 		b, ok := rs.files[r.URL.Path]
@@ -543,5 +553,61 @@ func TestApplyRefusesTheActiveVersion(t *testing.T) {
 	}
 	if l.Active() != "0.4.0" || l.Previous() != "0.3.0" || a.restarts != 0 {
 		t.Fatalf("active=%s previous=%s restarts=%d", l.Active(), l.Previous(), a.restarts)
+	}
+}
+
+// ---- check cadence (owner, 2026-11-17: 30 min instead of 6 h) ----
+
+func TestUnchangedReleaseListIsAConditional304(t *testing.T) {
+	r := newRig(t, relSpec{version: "0.3.0"})
+	ctx := context.Background()
+	if err := r.c.Check(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.c.Check(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if r.srv.notModified != 1 {
+		t.Fatalf("second check must be answered 304, got %d", r.srv.notModified)
+	}
+	if st, _ := r.c.State(); st != StateAvailable || r.metric("agent.update.latest") != "0.3.0" {
+		t.Fatalf("state after 304: %s latest=%v", st, r.metric("agent.update.latest"))
+	}
+}
+
+func TestReconnectChecksOnlyWhenStale(t *testing.T) {
+	r := newRig(t, relSpec{version: "0.3.0"})
+	woke := func() bool {
+		select {
+		case <-r.c.wake:
+			return true
+		default:
+			return false
+		}
+	}
+	r.c.CheckIfStale(10 * time.Minute)
+	if !woke() {
+		t.Fatal("never checked: a new session must trigger a check")
+	}
+	_ = r.c.Check(context.Background())
+	r.clock = r.clock.Add(5 * time.Minute)
+	r.c.CheckIfStale(10 * time.Minute)
+	if woke() {
+		t.Fatal("checked 5 min ago: no new check")
+	}
+	r.clock = r.clock.Add(6 * time.Minute)
+	r.c.CheckIfStale(10 * time.Minute)
+	if !woke() {
+		t.Fatal("last check 11 min ago: a new session must trigger a check")
+	}
+}
+
+func TestCheckIntervalIsThirtyMinutesWithJitter(t *testing.T) {
+	r := newRig(t)
+	for range 200 {
+		d := r.c.nextCheck()
+		if d < 27*time.Minute || d > 33*time.Minute {
+			t.Fatalf("interval %s outside 30 min ±10 %%", d)
+		}
 	}
 }

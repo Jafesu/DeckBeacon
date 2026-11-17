@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"os/exec"
@@ -61,7 +62,7 @@ type Config struct {
 	ReleasesURL   string
 	HTTP          *http.Client
 	Keys          []ed25519.PublicKey
-	CheckEvery    time.Duration // default 6 h
+	CheckEvery    time.Duration // default 30 min (owner, 2026-11-17), ±10 % jitter
 	Tick          time.Duration // approval/safe-window loop, default 30 s
 	Integration   func() string // connected HA integration version ("" = unknown)
 	Busy          func() (bool, string)
@@ -93,6 +94,10 @@ type Client struct {
 	// about to be replaced and must never start a second one (found on the
 	// G15: a second updater undid the first one's rollback).
 	handedOver bool
+	// The release list's ETag and body: an unchanged list costs GitHub a 304,
+	// which does not count against the anonymous rate limit.
+	listETag string
+	listBody []byte
 }
 
 type approval struct {
@@ -113,7 +118,7 @@ type Result struct {
 // New creates the client.
 func New(cfg Config) *Client {
 	if cfg.CheckEvery <= 0 {
-		cfg.CheckEvery = 6 * time.Hour
+		cfg.CheckEvery = 30 * time.Minute
 	}
 	if cfg.Tick <= 0 {
 		cfg.Tick = 30 * time.Second
@@ -224,6 +229,70 @@ func (c *Client) readChannel() string {
 	return strings.TrimSpace(string(b))
 }
 
+// CheckIfStale wakes the client when the last successful check is older than
+// maxAge (called on every new HA session, so reloading the integration in HA
+// works as "check now").
+func (c *Client) CheckIfStale(maxAge time.Duration) {
+	c.mu.Lock()
+	stale := c.checked.IsZero() || c.cfg.Now().Sub(c.checked) > maxAge
+	c.mu.Unlock()
+	if stale {
+		c.Wake()
+	}
+}
+
+// nextCheck is CheckEvery with ±10 % jitter, so devices don't check in lockstep.
+func (c *Client) nextCheck() time.Duration {
+	j := int64(c.cfg.CheckEvery) / 10
+	if j <= 0 {
+		return c.cfg.CheckEvery
+	}
+	return c.cfg.CheckEvery + time.Duration(rand.Int64N(2*j+1)-j)
+}
+
+// listReleases fetches the release list with a conditional request.
+func (c *Client) listReleases(ctx context.Context) ([]byte, error) {
+	url := c.cfg.ReleasesURL
+	if !strings.HasPrefix(url, "https://") && !strings.HasPrefix(url, "http://127.0.0.1") {
+		return nil, fmt.Errorf("update: refusing non-HTTPS URL")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "deckbeacon-agent")
+	c.mu.Lock()
+	etag, cached := c.listETag, c.listBody
+	c.mu.Unlock()
+	if etag != "" && cached != nil {
+		req.Header.Set("If-None-Match", etag)
+	}
+	resp, err := c.cfg.HTTP.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotModified && cached != nil {
+		return cached, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("update: %s returned %s", url, resp.Status)
+	}
+	const limit = 4 << 20
+	b, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > limit {
+		return nil, fmt.Errorf("update: response too large")
+	}
+	c.mu.Lock()
+	c.listETag, c.listBody = resp.Header.Get("ETag"), b
+	c.mu.Unlock()
+	return b, nil
+}
+
 // Wake triggers a check soon (channel change, reconnect).
 func (c *Client) Wake() {
 	select {
@@ -292,7 +361,7 @@ func (c *Client) Check(ctx context.Context) error {
 	c.mu.Lock()
 	channel := c.channel
 	c.mu.Unlock()
-	body, err := c.get(ctx, c.cfg.ReleasesURL, 4<<20)
+	body, err := c.listReleases(ctx)
 	if err != nil {
 		c.setState(StateCheckFailed, err.Error())
 		return err
@@ -512,7 +581,7 @@ func (c *Client) Run(ctx context.Context) {
 				}
 				failed = false
 			}
-			check.Reset(c.cfg.CheckEvery)
+			check.Reset(c.nextCheck())
 		case <-c.wake:
 			_ = c.Check(ctx)
 			c.step(ctx)

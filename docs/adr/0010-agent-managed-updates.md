@@ -31,7 +31,7 @@ The integration and cards already update through the HA Marketplace (ADR-0005). 
   - **Checksums alone:** they don't protect against a compromised release page.
 
 ### D2 Discovery: the agent checks, HA shows it
-- **Check:** the agent reads the GitHub releases list (public HTTPS) every 6 h and at start, for its channel:
+- **Check:** the agent reads the GitHub releases list (public HTTPS) every 30 min (±10 % jitter; owner, 2026-11-17, replacing the original 6 h after the G15 test showed a new release could take hours to appear), at start, on a channel change, and on a new HA session when the last check is over 10 min old, using a conditional request (ETag) so an unchanged list doesn't count against GitHub's anonymous limit. For its channel:
   - `stable` = no pre-release suffix;
   - `beta` adds `-beta.N`;
   - `dev` adds `-dev.N`.
