@@ -1,0 +1,625 @@
+{
+  "description": "max 100 games per page",
+  "schema": "envelope",
+  "error_path": "/body/games",
+  "message": {
+    "v": 1,
+    "type": "library",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAKB3",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "revision": 3,
+      "page": 1,
+      "pages": 1,
+      "games": [
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        },
+        {
+          "app_id": 1,
+          "name": "x",
+          "kind": "game",
+          "status": "installed"
+        }
+      ]
+    }
+  }
+}

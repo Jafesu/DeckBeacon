@@ -1,0 +1,36 @@
+{
+  "description": "no account data in library entries",
+  "schema": "envelope",
+  "error_path": "/body/games/0",
+  "message": {
+    "v": 1,
+    "type": "library",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAKB2",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "revision": 3,
+      "page": 1,
+      "pages": 1,
+      "games": [
+        {
+          "app_id": 1091500,
+          "name": "Cyberpunk 2077",
+          "kind": "game",
+          "status": "installed",
+          "size_on_disk": 66818683782,
+          "build_id": "26161058",
+          "last_played": "2026-11-16T14:36:44Z",
+          "library": "lib0",
+          "last_owner": "76561190000000000"
+        },
+        {
+          "app_id": 1493710,
+          "name": "Proton Experimental",
+          "kind": "tool",
+          "status": "installed"
+        }
+      ]
+    }
+  }
+}

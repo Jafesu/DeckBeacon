@@ -140,7 +140,7 @@ func TestDellG15WithoutNvidiaDriverReportsUnavailable(t *testing.T) {
 	if caps["telemetry.gpu.busy"].Status != "unavailable" || caps["telemetry.cpu"].Status != "available" {
 		t.Fatalf("caps %+v %+v", caps["telemetry.gpu.busy"], caps["telemetry.cpu"])
 	}
-	if caps["power.wake"].Status != "unsupported" || caps["game.launch"].Status != "unsupported" {
+	if caps["power.wake"].Status != "unsupported" || caps["power.suspend"].Status != "unsupported" {
 		t.Fatal("unimplemented capabilities must be reported unsupported")
 	}
 }

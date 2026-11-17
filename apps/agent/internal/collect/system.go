@@ -433,8 +433,7 @@ func (s *System) Capabilities(ctx context.Context) []Capability {
 		return Capability{ID: id, Status: "unsupported", Tier: "none", Source: "none", Reason: "not implemented in this agent version (planned " + ms + ")"}
 	}
 	out = append(out,
-		planned("game.library", "M6"), planned("game.launch", "M6"), planned("game.current", "M6"),
-		planned("downloads.status", "M6"), planned("notifications.display", "M7"),
+		planned("notifications.display", "M7"),
 		planned("power.suspend", "M7"), planned("power.reboot", "M7"), planned("power.shutdown", "M7"),
 		Capability{ID: "power.wake", Status: "unsupported", Tier: "none", Source: "none", Reason: "wake from sleep/off is not supported (spec 02: never guaranteed)"},
 	)

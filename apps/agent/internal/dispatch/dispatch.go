@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/jafesu/deckbeacon/apps/agent/internal/store"
@@ -37,23 +38,54 @@ type Result struct {
 	Result    map[string]any `json:"result,omitempty"`
 }
 
-// Handler executes one command kind. It returns the terminal result.
-type Handler func(ctx context.Context, cmd Command) Result
+// Handler executes one command kind. It returns the immediate result and,
+// optionally, a follow-up that runs asynchronously and yields the final state
+// (e.g. launch: dispatched now, confirmed once the game process appears).
+type Handler func(ctx context.Context, cmd Command) (Result, func(ctx context.Context) Result)
 
-// Dispatcher routes commands.
+type entry struct {
+	tier string
+	h    Handler
+}
+
+// Dispatcher routes commands and enforces permission tiers on the agent
+// (spec 10: "enforce on agent, not just HA UI").
 type Dispatcher struct {
 	store    *store.Store
-	handlers map[string]Handler
+	handlers map[string]entry
 	now      func() time.Time
+	mu       sync.Mutex
+	granted  map[string]bool
+	late     chan Result
 }
 
 // New creates a dispatcher.
 func New(s *store.Store, now func() time.Time) *Dispatcher {
-	return &Dispatcher{store: s, handlers: map[string]Handler{}, now: now}
+	return &Dispatcher{store: s, handlers: map[string]entry{}, now: now, granted: map[string]bool{"monitoring": true}, late: make(chan Result, 16)}
 }
 
-// Register adds a handler for a command name.
-func (d *Dispatcher) Register(name string, h Handler) { d.handlers[name] = h }
+// Register adds a handler for a command name requiring a permission tier.
+func (d *Dispatcher) Register(name, tier string, h Handler) { d.handlers[name] = entry{tier, h} }
+
+// SetGranted replaces the tiers granted for the current session (from welcome),
+// intersected by the caller with the agent's local policy.
+func (d *Dispatcher) SetGranted(tiers []string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.granted = map[string]bool{}
+	for _, t := range tiers {
+		d.granted[t] = true
+	}
+}
+
+func (d *Dispatcher) allowed(tier string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.granted[tier]
+}
+
+// Late delivers results of asynchronous follow-ups.
+func (d *Dispatcher) Late() <-chan Result { return d.late }
 
 // Handle processes a command received at receivedAt and returns the results to
 // send, in order. A replayed command id is never executed again.
@@ -71,12 +103,22 @@ func (d *Dispatcher) Handle(ctx context.Context, cmd Command, receivedAt time.Ti
 	if now.Sub(receivedAt) > time.Duration(cmd.TTLSeconds)*time.Second {
 		return finish(Result{CommandID: cmd.CommandID, State: "expired", Error: &Error{Code: "expired", Message: "command TTL elapsed before execution"}})
 	}
-	h, ok := d.handlers[cmd.Name]
+	e, ok := d.handlers[cmd.Name]
 	if !ok {
 		return finish(Result{CommandID: cmd.CommandID, State: "rejected", Error: &Error{Code: "unsupported", Message: cmd.Name + " is not supported by this agent version"}})
 	}
+	if !d.allowed(e.tier) {
+		return finish(Result{CommandID: cmd.CommandID, State: "rejected", Error: &Error{Code: "permission_denied", Message: "permission tier " + e.tier + " is not granted for this connection"}})
+	}
 	accepted := Result{CommandID: cmd.CommandID, State: "accepted"}
-	final := h(ctx, cmd)
-	_ = d.store.FinishCommand(cmd.CommandID, final.State, d.now())
-	return []Result{accepted, final}
+	r, follow := e.h(ctx, cmd)
+	_ = d.store.FinishCommand(cmd.CommandID, r.State, d.now())
+	if follow != nil {
+		go func() {
+			fr := follow(context.WithoutCancel(ctx))
+			_ = d.store.FinishCommand(cmd.CommandID, fr.State, d.now())
+			d.late <- fr
+		}()
+	}
+	return []Result{accepted, r}
 }

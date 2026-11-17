@@ -35,7 +35,8 @@
         "pair_request",
         "pair_confirm",
         "pair_complete",
-        "pair_abort"
+        "pair_abort",
+        "library"
       ]
     },
     "id": {
@@ -312,6 +313,22 @@
         "properties": {
           "body": {
             "$ref": "pair_abort.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "library"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "library.schema.json"
           }
         }
       }

@@ -38,4 +38,5 @@ Remove or rename a field; make an optional field required; change a type or mean
 ## Changelog
 - **1.0** (M1, 2026-11-16): initial schema set. Sequence counters capped at 2^53−1.
 - **1.0+pairing** (M2): `pair_request`, `pair_confirm`, `pair_complete`, `pair_abort` (additive).
-- **1.1** (M3): event type `device_booted` (additive). Older receivers treat it as an unknown event type (logged, skipped).
+- **1.1** (M3): event type `device_booted` (additive).
+- **1.2** (M6): message type `library` (paged snapshot, no account data). Telemetry keys `game.*`, `library.*`, `downloads.*` (additive). Older receivers treat it as an unknown event type (logged, skipped).

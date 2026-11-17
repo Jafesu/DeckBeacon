@@ -76,6 +76,17 @@ type Config struct {
 	ExtraCapabilities func() []collect.Capability
 	// AckWait bounds how long a sleep/shutdown is held for HA's ack (default 3 s).
 	AckWait time.Duration
+	// Games provides game telemetry and library snapshots (nil: none).
+	Games GameSource
+	// LocalPolicy filters the tiers HA grants (agent-side enforcement, spec 10).
+	LocalPolicy func(granted []string) []string
+}
+
+// GameSource is implemented by games.Provider.
+type GameSource interface {
+	Metrics() []collect.Metric
+	LibraryPages() (revision uint64, pages []map[string]any)
+	Revision() uint64
 }
 
 // ErrRevoked means HA no longer recognises this device.
@@ -279,6 +290,9 @@ type welcomeBody struct {
 	HeartbeatS           int    `json:"heartbeat_s"`
 	LastReceivedEventSeq uint64 `json:"last_received_event_seq"`
 	IntegrationVersion   string `json:"integration_version"`
+	Policy               struct {
+		Granted []string `json:"granted"`
+	} `json:"policy"`
 }
 
 type errorBody struct {
@@ -347,6 +361,11 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	if w.LastReceivedEventSeq > 0 {
 		_ = c.cfg.Store.AckThrough(w.LastReceivedEventSeq)
 	}
+	granted := w.Policy.Granted
+	if c.cfg.LocalPolicy != nil {
+		granted = c.cfg.LocalPolicy(granted)
+	}
+	c.cfg.Dispatcher.SetGranted(granted)
 	hb := time.Duration(w.HeartbeatS) * time.Second
 	c.setStatus("connected_"+transport, transport, u.URL, "")
 	c.cfg.Log.Info("connected", "transport", transport, "integration", w.IntegrationVersion)
@@ -431,13 +450,39 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	}
 	defer releaseAcked(true) // never leave the system inhibited
 
+	var sentRevision uint64
+	sendLibrary := func() error {
+		if c.cfg.Games == nil {
+			return nil
+		}
+		rev, pages := c.cfg.Games.LibraryPages()
+		if rev == 0 || rev == sentRevision {
+			return nil
+		}
+		for _, pg := range pages {
+			if _, err := conn.Send(ctx, "library", pg); err != nil {
+				return err
+			}
+		}
+		sentRevision = rev
+		return nil
+	}
 	sendTelemetry := func() error {
 		ms := c.cfg.Collector.Collect(ctx)
+		if c.cfg.Games != nil {
+			ms = append(ms, c.cfg.Games.Metrics()...)
+		}
 		if len(ms) == 0 {
 			return nil
 		}
-		_, err := conn.Send(ctx, "telemetry", map[string]any{"metrics": ms})
-		return err
+		for len(ms) > 0 { // telemetry messages carry at most 256 metrics
+			n := min(len(ms), 200)
+			if _, err := conn.Send(ctx, "telemetry", map[string]any{"metrics": ms[:n]}); err != nil {
+				return err
+			}
+			ms = ms[n:]
+		}
+		return sendLibrary()
 	}
 	flushEvents := func() error {
 		evs, err := c.cfg.Store.PendingEvents(sentThrough, 50)
@@ -478,6 +523,10 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			}
 		case <-telemetry.C:
 			if err := sendTelemetry(); err != nil {
+				return err
+			}
+		case r := <-c.cfg.Dispatcher.Late():
+			if _, err := conn.Send(ctx, "command_result", r); err != nil {
 				return err
 			}
 		case <-flush.C:
@@ -563,6 +612,10 @@ func (c *Client) handle(ctx context.Context, conn *channel.Conn, m *channel.Mess
 	}
 	return nil
 }
+
+// AppendEvent queues a durable event from another component (e.g. games).
+// Safe for concurrent use; delivered by the session when connected.
+func (c *Client) AppendEvent(typ string, data map[string]any) uint64 { return c.appendEvent(typ, data) }
 
 func (c *Client) appendEvent(typ string, data map[string]any) uint64 {
 	raw, _ := json.Marshal(data)

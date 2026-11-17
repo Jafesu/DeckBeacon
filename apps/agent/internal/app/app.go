@@ -22,10 +22,12 @@ import (
 	"github.com/jafesu/deckbeacon/apps/agent/internal/discovery"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/dispatch"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/fsutil"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/games"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/identity"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/pairing"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/paths"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/session"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/steam"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/store"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/trust"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/ulid"
@@ -171,6 +173,13 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 	lc, lcCaps, stopLC := startLifecycle(ctx, e.Log)
 	defer stopLC()
 	svc, _ := serviceManager(e)
+	home, _ := os.UserHomeDir()
+	prov := games.New(games.Config{SteamRoot: steam.SteamRoot(home), ProcRoot: filepath.Join(e.Host.Root, "proc"), Log: e.Log})
+	go prov.Run(ctx)
+	disp := dispatch.New(st, time.Now)
+	disp.Register("launch_game", "game_management", prov.LaunchHandler())
+	disp.Register("refresh_library", "monitoring", prov.RefreshHandler())
+	localPolicy := loadLocalPolicy(e)
 	writeStatus := func(s session.Status) {
 		b, _ := json.MarshalIndent(s, "", "  ")
 		_ = fsutil.WriteFileAtomic(filepath.Join(e.Dirs.Runtime, "status.json"), b, 0o600)
@@ -187,15 +196,27 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 			writeStatus(session.Status{State: "revoked", Since: time.Now().UTC(), LastError: session.ErrRevoked.Error()})
 		default:
 			cli, err := session.New(session.Config{
-				Identity: id, Trust: tr, Store: st, Collector: sys, Dispatcher: dispatch.New(st, time.Now),
+				Identity: id, Trust: tr, Store: st, Collector: sys, Dispatcher: disp, Games: prov, LocalPolicy: localPolicy,
 				Hello:             session.HelloInfo{AgentVersion: semver(buildinfo.Version), Device: deviceInfo(e.Host, osr), BootID: bootID(e.Host), Mode: func() string { m, _ := sys.SessionMode(); return m }},
 				TelemetryInterval: telemetryInterval, Log: e.Log, OnStatus: writeStatus,
-				Lifecycle: lc, ExtraCapabilities: func() []collect.Capability { return lifecycleCapabilities(lcCaps, svc) },
+				Lifecycle: lc, ExtraCapabilities: func() []collect.Capability { return append(lifecycleCapabilities(lcCaps, svc), prov.Capabilities()...) },
 			})
 			if err != nil {
 				return err
 			}
+			evCtx, stopEvents := context.WithCancel(ctx)
+			go func() { // game events go to the durable queue whether or not HA is reachable
+				for {
+					select {
+					case <-evCtx.Done():
+						return
+					case ev := <-prov.Events():
+						cli.AppendEvent(ev.Type, ev.Data)
+					}
+				}
+			}()
 			err = cli.Run(ctx)
+			stopEvents()
 			if errors.Is(err, session.ErrRevoked) {
 				tr.Revoked = true
 				_ = trust.Save(e.Dirs.State, tr)
@@ -348,4 +369,31 @@ func pinnedBootTime(st *store.Store, bootID string, current time.Time) time.Time
 	}
 	_ = st.SetMeta("boot_time:"+bootID, current.UTC().Format(time.RFC3339))
 	return current
+}
+
+// loadLocalPolicy reads optional agent-side restrictions from
+// $CONFIG/deckbeacon/policy.json: {"deny_tiers": ["game_management", ...]}.
+// The agent enforces the intersection of HA's grant and this file (spec 10).
+func loadLocalPolicy(e Env) func([]string) []string {
+	var cfg struct {
+		DenyTiers []string `json:"deny_tiers"`
+	}
+	if b, err := os.ReadFile(filepath.Join(e.Dirs.Config, "policy.json")); err == nil {
+		if err := json.Unmarshal(b, &cfg); err != nil {
+			e.Log.Warn("ignoring invalid policy.json", "err", err)
+		}
+	}
+	deny := map[string]bool{}
+	for _, t := range cfg.DenyTiers {
+		deny[t] = true
+	}
+	return func(granted []string) []string {
+		out := []string{}
+		for _, t := range granted {
+			if !deny[t] {
+				out = append(out, t)
+			}
+		}
+		return out
+	}
 }
