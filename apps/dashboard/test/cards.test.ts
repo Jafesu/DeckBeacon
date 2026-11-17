@@ -86,6 +86,31 @@ describe("now playing card", () => {
     expect(h.calls.filter((c) => c.type === "deckbeacon/artwork_url")).toHaveLength(1);
   });
 
+  it("close asks for confirmation; force close is offered only after a failed close", async () => {
+    const h = hass({ game_current_app_id: "413150", game_current_name: "Stardew Valley" }, { failLaunch: "the game did not close within 20s; use force close" });
+    const el = await mount("deckbeacon-now-playing-card", {}, h);
+    const button = (label: string) => $$<HTMLButtonElement>(el, ".actions button").find((b) => b.textContent!.trim().startsWith(label))!;
+    button("Close game").click();
+    await settle(el);
+    expect(text(el)).toContain("Close Stardew Valley? Unsaved progress may be lost.");
+    expect(h.services).toHaveLength(0);
+    button("Close game").click();
+    await settle(el);
+    expect(h.services[0]).toEqual({ domain: "deckbeacon", service: "close_game", data: { device_id: "dev-g15", force: false } });
+    expect(text(el)).toContain("use force close");
+    button("Force close").click();
+    await settle(el);
+    expect(text(el)).toContain("Unsaved progress will be lost");
+    button("Force close").click();
+    await settle(el);
+    expect(h.services[1].data).toEqual({ device_id: "dev-g15", force: true });
+  });
+
+  it("no close button when launching/closing is not permitted", async () => {
+    const el = await mount("deckbeacon-now-playing-card", {}, hass({ game_current_app_id: "413150" }, { devices: [device({ can_launch: false })] }));
+    expect($(el, ".actions")).toBeNull();
+  });
+
   it("not playing", async () => {
     const el = await mount("deckbeacon-now-playing-card", {}, hass({ game_current_app_id: "unavailable" }));
     expect(text(el)).toContain("Not playing");

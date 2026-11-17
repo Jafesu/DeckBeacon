@@ -52,3 +52,12 @@ Environment: Go 1.26.11; HA 2026.5.1 and 2026.10.4 test harness (43 tests each);
 - Optional: an "install progress" (staged bytes) sensor matching Steam's second bar.
 - §13 open items: completion of a large download, cancel mid-download, a download in Gaming Mode.
 - Proton Rich Presence (deferred by the owner).
+
+## Addendum (2026-11-17): close the running game
+At the owner's request (during M8): command `close_game {app_id, force}`, already in the protocol schema, tier `game_management`.
+- **How:** Steam has no documented close API, so the agent signals the game's own process tree: everything under its `reaper`, children first, never the Steam client or the launch client.
+- **Graceful:** SIGTERM, then wait up to 20 s for the game to exit.
+- **Force:** SIGKILL, refused without `confirmed_by_user`.
+- **HA:** the `deckbeacon.close_game` action (`force` is the explicit confirmation), a "Close game" button, and a "Force close game" button that is disabled by default.
+- **Card:** the now-playing card asks for confirmation and offers force close only after a failed close.
+- Hardware check pending: how Proton games react to SIGTERM varies by game.

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -274,5 +275,86 @@ func TestLiveDownloadMetrics(t *testing.T) {
 	}
 	if eta := metric(p, "downloads.eta_s").(int64); eta < 150 || eta > 200 {
 		t.Fatalf("eta %v (8.7 GB at 50 MB/s)", eta)
+	}
+}
+
+// proc writes a fake /proc entry with a stat line naming its parent.
+func proc(t *testing.T, root string, pid, ppid int, comm string, cmdline ...string) {
+	t.Helper()
+	d := filepath.Join(root, fmt.Sprint(pid))
+	_ = os.MkdirAll(d, 0o755)
+	_ = os.WriteFile(filepath.Join(d, "stat"), []byte(fmt.Sprintf("%d (%s) S %d 1 1 0", pid, comm, ppid)), 0o644)
+	_ = os.WriteFile(filepath.Join(d, "comm"), []byte(comm+"\n"), 0o644)
+	if cmdline != nil {
+		_ = os.WriteFile(filepath.Join(d, "cmdline"), []byte(strings.Join(cmdline, "\x00")+"\x00"), 0o644)
+	}
+}
+
+func closeFixture(t *testing.T) (string, string) {
+	sr, root := fixture(t)
+	proc(t, root, 50, 1, "steam", "/s/steam")                                // the Steam client: never signalled
+	proc(t, root, 899, 50, "steam-runtime-l", "steam-runtime-launch-client") // launch client (reaper's parent)
+	proc(t, root, 900, 899, "reaper", "/s/reaper", "SteamLaunch", "AppId=413150", "--", "/s/game")
+	proc(t, root, 901, 900, "srt-bwrap")
+	proc(t, root, 902, 901, "Stardew Valley")
+	proc(t, root, 903, 902, "Stardew (worker)") // comm with spaces and parens
+	return sr, root
+}
+
+func TestCloseGameSignalsOnlyTheGameTree(t *testing.T) {
+	sr, root := closeFixture(t)
+	var got []string
+	p := New(Config{SteamRoot: sr, ProcRoot: root, CloseWait: 3 * time.Second, Signal: func(pid int, sig syscall.Signal) error {
+		got = append(got, fmt.Sprintf("%d:%v", pid, sig))
+		if pid == 900 { // the game exits once its reaper is told to
+			for _, d := range []string{"900", "901", "902", "903"} {
+				_ = os.RemoveAll(filepath.Join(root, d))
+			}
+		}
+		return nil
+	}})
+	p.scan(true)
+	p.poll()
+	h := p.CloseHandler()
+	r, follow := h(context.Background(), cmd("close_game", `{"app_id": 413150}`))
+	if r.State != "dispatched" || follow == nil {
+		t.Fatalf("%+v", r)
+	}
+	if strings.Join(got, ",") != "903:terminated,902:terminated,901:terminated,900:terminated" {
+		t.Fatalf("signalled %v (children first, reaper last, never Steam or the launch client)", got)
+	}
+	if fr := follow(context.Background()); fr.State != "confirmed" {
+		t.Fatalf("follow-up %+v", fr)
+	}
+}
+
+func TestCloseGameRefusals(t *testing.T) {
+	sr, root := closeFixture(t)
+	var got []int
+	p := New(Config{SteamRoot: sr, ProcRoot: root, CloseWait: 1200 * time.Millisecond, Signal: func(pid int, sig syscall.Signal) error { got = append(got, pid); return nil }})
+	p.scan(true)
+	h := p.CloseHandler()
+	for args, code := range map[string]string{`{}`: "invalid_args", `{"app_id": 1091500}`: "unavailable", `{"app_id": 413150, "force": true}`: "confirmation_required"} {
+		if r, _ := h(context.Background(), cmd("close_game", args)); r.State != "rejected" || r.Error.Code != code {
+			t.Errorf("%s: %+v", args, r)
+		}
+	}
+	if len(got) != 0 {
+		t.Fatal("refused closes must not signal anything")
+	}
+	// A game that ignores SIGTERM: the follow-up fails and suggests force close.
+	_, follow := h(context.Background(), cmd("close_game", `{"app_id": 413150}`))
+	if fr := follow(context.Background()); fr.State != "failed" || !strings.Contains(fr.Error.Message, "force close") {
+		t.Fatalf("%+v", fr)
+	}
+	// Confirmed force close: SIGKILL.
+	got = nil
+	c := cmd("close_game", `{"app_id": 413150, "force": true}`)
+	c.CommandID = "Cforce"
+	c.ConfirmedByUser = true
+	var sigs []syscall.Signal
+	p.cfg.Signal = func(pid int, sig syscall.Signal) error { sigs = append(sigs, sig); return nil }
+	if r, _ := h(context.Background(), c); r.State != "dispatched" || len(sigs) != 4 || sigs[0] != syscall.SIGKILL {
+		t.Fatalf("force: %+v %v", r, sigs)
 	}
 }

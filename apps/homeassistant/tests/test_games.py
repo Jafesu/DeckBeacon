@@ -248,3 +248,46 @@ def test_duplicate_names_are_disambiguated() -> None:
         }
     )
     assert launchable(rt) == {"Discord (2961728726)": 2961728726, "Discord (3248090148)": 3248090148}
+
+
+async def test_close_game_action_and_buttons(hass: HomeAssistant, client) -> None:
+    agent, entry, device_id, _ = await setup(hass, client)
+    reg = er.async_get(hass)
+    close_btn = reg.async_get_entity_id("button", DOMAIN, f"{agent.device_id}_close_game")
+    force_id = reg.async_get_entity_id("button", DOMAIN, f"{agent.device_id}_force_close_game")
+    assert reg.async_get(force_id).disabled_by is not None  # opt-in: no confirmation possible on a button
+    assert hass.states.get(close_btn).state == "unavailable"  # nothing running
+    with pytest.raises(ServiceValidationError, match="No game is running"):
+        await hass.services.async_call(DOMAIN, "close_game", {"device_id": device_id}, blocking=True, return_response=True)
+
+    await agent.telemetry([{"key": "game.current.app_id", "value": 413150}, {"key": "game.current.name", "value": "Stardew Valley"}])
+    await settle(hass)
+    assert hass.states.get(close_btn).state != "unavailable"
+
+    async def device_side(expect_force: bool):
+        cmd = await agent.recv(timeout=5)
+        body = cmd["body"]
+        assert body["name"] == "close_game" and body["args"] == {"app_id": 413150, "force": expect_force}
+        assert body.get("confirmed_by_user", False) is expect_force  # force carries HA-side confirmation
+        await agent.send("command_result", {"command_id": body["command_id"], "state": "dispatched"})
+
+    task = asyncio.create_task(device_side(False))
+    res = await hass.services.async_call(DOMAIN, "close_game", {"device_id": device_id}, blocking=True, return_response=True)
+    await task
+    assert res == {"state": "dispatched", "app_id": 413150, "name": "Stardew Valley", "force": False}
+
+    task = asyncio.create_task(device_side(True))
+    await hass.services.async_call(DOMAIN, "close_game", {"device_id": device_id, "force": True}, blocking=True, return_response=True)
+    await task
+
+    task = asyncio.create_task(device_side(False))
+    await hass.services.async_call("button", "press", {"entity_id": close_btn}, blocking=True)
+    await task
+
+
+async def test_close_game_denied_remotely(hass: HomeAssistant, client) -> None:
+    agent, entry, device_id, _ = await setup(hass, client, transport="remote")
+    await agent.telemetry([{"key": "game.current.app_id", "value": 413150}])
+    await settle(hass)
+    with pytest.raises(ServiceValidationError, match="not allowed over the remote"):
+        await hass.services.async_call(DOMAIN, "close_game", {"device_id": device_id}, blocking=True, return_response=True)

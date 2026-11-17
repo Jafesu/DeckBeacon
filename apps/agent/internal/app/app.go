@@ -184,6 +184,7 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 	go prov.Run(ctx)
 	disp := dispatch.New(st, time.Now)
 	disp.Register("launch_game", "game_management", prov.LaunchHandler())
+	disp.Register("close_game", "game_management", prov.CloseHandler())
 	disp.Register("refresh_library", "monitoring", prov.RefreshHandler())
 	disp.Register("get_artwork", "monitoring", artwork.New(gcfg.SteamRoot, prov.IsShortcut).Handler())
 	localPolicy := loadLocalPolicy(e)

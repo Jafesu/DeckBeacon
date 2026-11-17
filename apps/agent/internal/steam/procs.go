@@ -13,6 +13,7 @@ import (
 type Running struct {
 	AppID uint32
 	Exe   string
+	PID   int // the game's reaper process
 }
 
 // Procs is one pass over the process table.
@@ -91,7 +92,8 @@ func ScanProcs(procRoot string) Procs {
 		if id == 0 {
 			continue
 		}
-		byID[id] = Running{AppID: id, Exe: exeName(args, sep)}
+		pid, _ := strconv.Atoi(filepath.Base(d))
+		byID[id] = Running{AppID: id, Exe: exeName(args, sep), PID: pid}
 	}
 	switch {
 	case plasma:
@@ -155,4 +157,44 @@ func readIO(path string) (wchar, writeBytes uint64, ok bool) {
 		}
 	}
 	return wchar, writeBytes, gotW && gotB
+}
+
+// Descendants returns pid and every process below it (by PPid in /proc/*/stat),
+// breadth-first and bounded.
+func Descendants(procRoot string, pid int) []int {
+	dirs, _ := filepath.Glob(filepath.Join(procRoot, "[0-9]*"))
+	children := map[int][]int{}
+	for _, d := range dirs {
+		raw, err := os.ReadFile(filepath.Join(d, "stat"))
+		if err != nil {
+			continue
+		}
+		// "pid (comm) state ppid ...": comm may contain spaces/parens, so
+		// parse after the last ')'.
+		s := string(raw)
+		i := strings.LastIndexByte(s, ')')
+		if i < 0 {
+			continue
+		}
+		f := strings.Fields(s[i+1:])
+		if len(f) < 2 {
+			continue
+		}
+		child, err1 := strconv.Atoi(filepath.Base(d))
+		ppid, err2 := strconv.Atoi(f[1])
+		if err1 == nil && err2 == nil {
+			children[ppid] = append(children[ppid], child)
+		}
+	}
+	out := []int{pid}
+	seen := map[int]bool{pid: true}
+	for i := 0; i < len(out) && len(out) < 4096; i++ {
+		for _, c := range children[out[i]] {
+			if !seen[c] {
+				seen[c] = true
+				out = append(out, c)
+			}
+		}
+	}
+	return out
 }

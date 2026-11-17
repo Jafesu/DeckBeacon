@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/jafesu/deckbeacon/apps/agent/internal/collect"
@@ -38,8 +39,12 @@ type Config struct {
 	ScanEvery  time.Duration // library rescan (default 20 s)
 	LaunchWait time.Duration // how long a launch may take to show a process (default 90 s)
 	Launch     Launcher
-	Now        func() time.Time
-	Log        *slog.Logger
+	// Signal delivers a signal to a process (production: syscall.Kill). The
+	// agent runs as Steam's user, so it can signal the games Steam started.
+	Signal    func(pid int, sig syscall.Signal) error
+	CloseWait time.Duration // graceful close timeout (default 20 s)
+	Now       func() time.Time
+	Log       *slog.Logger
 	// Activity is the optional rich-presence source (ADR-0007, opt-in).
 	Activity ActivitySource
 }
@@ -86,6 +91,12 @@ func New(cfg Config) *Provider {
 	}
 	if cfg.Launch == nil {
 		cfg.Launch = SteamURLLauncher
+	}
+	if cfg.Signal == nil {
+		cfg.Signal = syscall.Kill
+	}
+	if cfg.CloseWait <= 0 {
+		cfg.CloseWait = 20 * time.Second
 	}
 	p := &Provider{cfg: cfg, tracker: steam.NewTracker(), events: make(chan Event, 64), prevStat: map[uint32]string{}, session: "unknown", changed: make(chan struct{}, 1)}
 	if cfg.SteamRoot != "" {
@@ -556,6 +567,84 @@ func (p *Provider) LaunchHandler() dispatch.Handler {
 			return dispatch.Result{CommandID: cmd.CommandID, State: "failed", Error: &dispatch.Error{Code: "unavailable", Message: "the game did not start within " + p.cfg.LaunchWait.String(), Retryable: true}}
 		}
 	}
+}
+
+// CloseHandler implements close_game (game_management tier). Steam has no
+// documented close API, so the agent signals the game's own process tree:
+// everything under the game's `reaper` (never the Steam client).
+//   - graceful: SIGTERM, then wait up to CloseWait for the reaper to exit;
+//   - force: SIGKILL, only with confirmed_by_user (spec 08: confirmation for
+//     force actions).
+func (p *Provider) CloseHandler() dispatch.Handler {
+	return func(ctx context.Context, cmd dispatch.Command) (dispatch.Result, func(context.Context) dispatch.Result) {
+		var args struct {
+			AppID uint32 `json:"app_id"`
+			Force bool   `json:"force"`
+		}
+		if err := jsonUnmarshal(cmd.Args, &args); err != nil || args.AppID == 0 {
+			return reject(cmd, "invalid_args", "app_id required"), nil
+		}
+		if args.Force && !cmd.ConfirmedByUser {
+			return reject(cmd, "confirmation_required", "force close needs confirmation in Home Assistant"), nil
+		}
+		var reaper int
+		for _, r := range steam.ScanProcs(p.cfg.ProcRoot).Running {
+			if r.AppID == args.AppID {
+				reaper = r.PID
+			}
+		}
+		if reaper <= 1 {
+			return reject(cmd, "unavailable", "that game is not running"), nil
+		}
+		sig, how := syscall.SIGTERM, "close"
+		if args.Force {
+			sig, how = syscall.SIGKILL, "force close"
+		}
+		signalled := 0
+		pids := steam.Descendants(p.cfg.ProcRoot, reaper)
+		for i := len(pids) - 1; i >= 0; i-- { // children first
+			if pids[i] > 1 && p.cfg.Signal(pids[i], sig) == nil {
+				signalled++
+			}
+		}
+		if signalled == 0 {
+			return dispatch.Result{CommandID: cmd.CommandID, State: "failed", Error: &dispatch.Error{Code: "internal", Message: "could not signal the game"}}, nil
+		}
+		p.cfg.Log.Info("closing game", "app_id", args.AppID, "how", how, "processes", signalled)
+		dispatched := dispatch.Result{CommandID: cmd.CommandID, State: "dispatched", Result: map[string]any{"app_id": args.AppID, "force": args.Force}}
+		return dispatched, func(ctx context.Context) dispatch.Result {
+			wait := p.cfg.CloseWait
+			if args.Force {
+				wait = 10 * time.Second
+			}
+			deadline := p.cfg.Now().Add(wait)
+			for p.cfg.Now().Before(deadline) {
+				p.poll()
+				if !p.running(args.AppID) {
+					return dispatch.Result{CommandID: cmd.CommandID, State: "confirmed", Result: map[string]any{"app_id": args.AppID, "force": args.Force}}
+				}
+				select {
+				case <-ctx.Done():
+					return dispatch.Result{CommandID: cmd.CommandID, State: "failed", Error: &dispatch.Error{Code: "internal", Message: "agent stopping"}}
+				case <-time.After(500 * time.Millisecond):
+				}
+			}
+			msg := "the game did not close within " + wait.String()
+			if !args.Force {
+				msg += "; use force close"
+			}
+			return dispatch.Result{CommandID: cmd.CommandID, State: "failed", Error: &dispatch.Error{Code: "unavailable", Message: msg, Retryable: true}}
+		}
+	}
+}
+
+func (p *Provider) running(appID uint32) bool {
+	for _, r := range steam.ScanProcs(p.cfg.ProcRoot).Running {
+		if r.AppID == appID {
+			return true
+		}
+	}
+	return false
 }
 
 // RefreshHandler implements refresh_library.
