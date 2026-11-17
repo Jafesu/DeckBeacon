@@ -29,6 +29,7 @@ Gaps measured from the code:
 1. **Profile refresh (protocol 1.6, additive).** `welcome` carries an optional `connection_profile {urls: [{url, kind}]}`, computed the same way as at pairing. Kinds: `internal`, `external`, `cloud`, `manual`. It is plus an optional owner-set **extra device URL** (HA option), e.g. a VPN or reverse-proxy address, sent as `manual_remote`.
    - The agent accepts it **only from the authenticated session**: Noise IK with the pinned HA key, so a LAN peer can't inject URLs. It validates every entry (http/https, no credentials, ≤ 8 URLs, ≤ 512 chars) and persists the list atomically in `trust.json`.
    - An empty or invalid profile never wipes the stored list.
+   - **The working address is never dropped** (added during implementation). HA always includes the address the device connected through: `manual`, or `manual_remote` if the session arrived over a remote path. The agent independently keeps the URL of the current session if a profile omits it. The Go ↔ HA E2E test found the case: HA's configured `internal_url` was unreachable, and a refresh that replaced the list made the device lose HA after the next reconnect.
 2. **Network-change awareness.** The agent watches its own interface addresses and default route (`/proc/net/route` and interface addresses, polled every 3 s: no privileges, no netlink dependency). On a change:
    - **while connected:** send a ping at once and expect the pong within 5 s, otherwise drop the session and reconnect immediately (no backoff);
    - **while remote:** probe local at once.

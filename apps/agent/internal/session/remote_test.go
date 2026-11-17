@@ -60,9 +60,18 @@ func TestProfileRefreshPersistsAndNeverWipes(t *testing.T) {
 	before := append([]trust.URL(nil), r.cli.cfg.Trust.URLs...)
 	r.cli.applyProfile(welcomeBody{ConnectionProfile: &struct {
 		URLs []trust.URL `json:"urls"`
-	}{URLs: []trust.URL{{URL: "https://user:pw@evil.invalid", Kind: "external"}, {URL: "ftp://x", Kind: "internal"}}}})
+	}{URLs: []trust.URL{{URL: "https://user:pw@evil.invalid", Kind: "external"}, {URL: "ftp://x", Kind: "internal"}}}}, before[0])
 	if !trust.SameURLs(before, r.cli.cfg.Trust.URLs) {
 		t.Fatal("invalid profile wiped the stored URLs")
+	}
+	// A profile whose internal URL is wrong never drops the URL that works.
+	working := trust.URL{URL: r.srv.URL(), Kind: "manual"}
+	r.cli.applyProfile(welcomeBody{ConnectionProfile: &struct {
+		URLs []trust.URL `json:"urls"`
+	}{URLs: []trust.URL{{URL: "http://10.10.10.10:8123", Kind: "internal"}}}}, working)
+	got2 := r.cli.cfg.Trust.URLs
+	if len(got2) != 2 || got2[1] != working {
+		t.Fatalf("working URL dropped: %+v", got2)
 	}
 }
 

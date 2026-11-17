@@ -207,8 +207,10 @@ func (c *Client) attemptURLs(ctx context.Context) func(yield func(trust.URL) boo
 }
 
 // applyProfile adopts HA's current connection profile from the authenticated
-// welcome (ADR-0011). Invalid or empty profiles never wipe working URLs.
-func (c *Client) applyProfile(w welcomeBody) {
+// welcome (ADR-0011). Invalid or empty profiles never wipe working URLs, and
+// the URL this session connected through is always kept: HA's configured
+// URLs can be wrong (found by the E2E test, where internal_url is a dummy).
+func (c *Client) applyProfile(w welcomeBody, current trust.URL) {
 	if w.ConnectionProfile == nil {
 		return
 	}
@@ -216,6 +218,17 @@ func (c *Client) applyProfile(w welcomeBody) {
 	if err != nil {
 		c.cfg.Log.Warn("ignoring connection profile from Home Assistant", "err", err)
 		return
+	}
+	known := false
+	for _, x := range urls {
+		known = known || x.URL == strings.TrimRight(current.URL, "/")
+	}
+	if !known && current.URL != "" {
+		kind := current.Kind
+		if kind == "discovered" { // proven by the handshake on the LAN
+			kind = "manual"
+		}
+		urls = append(urls, trust.URL{URL: strings.TrimRight(current.URL, "/"), Kind: kind})
 	}
 	if trust.SameURLs(urls, c.cfg.Trust.URLs) {
 		return
@@ -454,7 +467,7 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	if c.cfg.OnWelcome != nil {
 		c.cfg.OnWelcome(w.IntegrationVersion, w.Policy.UpdateChannel)
 	}
-	c.applyProfile(w)
+	c.applyProfile(w, u)
 	hb := time.Duration(w.HeartbeatS) * time.Second
 	c.setStatus("connected_"+transport, transport, u.URL, "")
 	c.cfg.Log.Info("connected", "transport", transport, "integration", w.IntegrationVersion)

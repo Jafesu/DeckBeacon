@@ -80,7 +80,7 @@ class SimAgent:
     async def confirm(self, accepted: bool = True) -> None:
         await self.send("pair_confirm", {"accepted": accepted})
 
-    async def connect(self, client, transport: str = "local", resume: int = 0) -> dict[str, Any]:
+    async def connect(self, client, transport: str = "local", resume: int = 0, via: str | None = None) -> dict[str, Any]:
         assert self.server_static is not None
         await self._handshake(client, "/api/deckbeacon/v1/ws", "IK", noise.PROLOGUE_SESSION, self.server_static)
         await self.send(
@@ -90,7 +90,7 @@ class SimAgent:
                 "protocol": {"min": 1, "max": 1},
                 "device": self.device(),
                 "boot_id": "0" * 32,
-                "session": {"mode": "gaming", "transport": transport, "resume_after_event_seq": resume},
+                "session": {"mode": "gaming", "transport": transport, "resume_after_event_seq": resume} | ({"via": via} if via else {}),
             },
         )
         return await self.recv()
