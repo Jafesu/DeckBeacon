@@ -16,7 +16,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"sync"
 
@@ -44,7 +43,7 @@ func ParseKind(s string) (Kind, bool) {
 
 // Limits (ADR-0009).
 const (
-	maxInputBytes = 8 << 20
+	maxInputBytes = 32 << 20   // G15: largest logo.png is 16.2 MB; the pixel guard is the real limit
 	maxPixels     = 40_000_000 // decompression-bomb guard, checked before decoding
 	maxOutput     = 512 << 10
 	ChunkBytes    = 32 << 10 // binary per artwork message (Noise plaintext limit)
@@ -52,18 +51,15 @@ const (
 
 var maxSize = map[Kind][2]int{Capsule: {600, 900}, Header: {920, 430}, Hero: {1280, 1280}, Logo: {640, 640}}
 
-// Steam librarycache names per kind, flat and in one hashed subdirectory
-// (G15 discovery §6: both layouts, sometimes mixed in one appid).
+// Steam librarycache names per kind, flat in <appid>/ or one level down in
+// <appid>/<sha1>/ (G15 §6 and the M8 artwork survey: 3,038 appids, both
+// layouts, sometimes mixed). Names don't promise sizes: 949 of the G15's
+// library_600x900.jpg files are 300x450, so every candidate is measured and
+// the largest wins.
 var (
-	flatNames = map[Kind][]string{
-		Capsule: {"library_600x900.jpg", "library_600x900_2x.jpg"},
+	names = map[Kind][]string{
+		Capsule: {"library_600x900.jpg", "library_capsule.jpg"},
 		Header:  {"header.jpg", "library_header.jpg"},
-		Hero:    {"library_hero.jpg"},
-		Logo:    {"logo.png"},
-	}
-	hashedNames = map[Kind][]string{
-		Capsule: {"library_capsule.jpg", "library_600x900.jpg"},
-		Header:  {"library_header.jpg", "header.jpg"},
 		Hero:    {"library_hero.jpg"},
 		Logo:    {"logo.png"},
 	}
@@ -160,35 +156,48 @@ func (s *Source) resolve(appID uint32, kind Kind) (string, os.FileInfo, error) {
 	if !realDir(filepath.Join(s.steamRoot, "appcache")) || !realDir(base) || !realDir(dir) {
 		return "", nil, ErrNotFound
 	}
-	for _, name := range flatNames[kind] {
-		p := filepath.Join(dir, name)
-		if st, ok := regularFile(p); ok {
-			return p, st, nil
-		}
-	}
+	dirs := []string{dir}
 	entries, _ := os.ReadDir(dir)
-	var subs []string
 	for _, e := range entries {
 		if hashedDir.MatchString(e.Name()) && realDir(filepath.Join(dir, e.Name())) {
-			subs = append(subs, e.Name())
+			dirs = append(dirs, filepath.Join(dir, e.Name()))
 		}
 	}
-	sort.Strings(subs)
 	var best string
 	var bestSt os.FileInfo
-	for _, sub := range subs { // newest matching file wins across hashed dirs
-		for _, name := range hashedNames[kind] {
-			p := filepath.Join(dir, sub, name)
-			if st, ok := regularFile(p); ok && (bestSt == nil || st.ModTime().After(bestSt.ModTime())) {
-				best, bestSt = p, st
-				break
+	bestArea := -1
+	for _, d := range dirs {
+		for _, name := range names[kind] {
+			p := filepath.Join(d, name)
+			st, ok := regularFile(p)
+			if !ok {
+				continue
+			}
+			area := measure(p)
+			if area > bestArea || (area == bestArea && st.ModTime().After(bestSt.ModTime())) {
+				best, bestSt, bestArea = p, st, area
 			}
 		}
 	}
-	if bestSt == nil {
+	if bestSt == nil || bestArea <= 0 {
 		return "", nil, ErrNotFound
 	}
 	return best, bestSt, nil
+}
+
+// measure reads only the image header (format sniffed from the bytes, not the
+// extension: the G15 has a JPEG named *.png) and returns the pixel area.
+func measure(path string) int {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0
+	}
+	defer f.Close()
+	cfg, format, err := image.DecodeConfig(f)
+	if err != nil || (format != "jpeg" && format != "png") {
+		return 0
+	}
+	return cfg.Width * cfg.Height
 }
 
 // gridSuffix is Steam's custom-artwork naming in userdata/*/config/grid/.

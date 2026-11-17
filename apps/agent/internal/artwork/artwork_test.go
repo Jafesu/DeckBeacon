@@ -71,6 +71,9 @@ func fixture(t *testing.T) string {
 	writeJPEG(t, filepath.Join(lc, "413150", "library_hero.jpg"), 1600, 517, "")
 	// Hashed layout (1091500).
 	writeJPEG(t, filepath.Join(lc, "1091500", sha, "library_capsule.jpg"), 300, 450, "")
+	// Mixed: a 300x450 file named 600x900 flat, a real 600x900 in the hashed dir.
+	writeJPEG(t, filepath.Join(lc, "204361", "library_600x900.jpg"), 300, 450, "")
+	writeJPEG(t, filepath.Join(lc, "204361", sha, "library_capsule.jpg"), 600, 900, "")
 	writePNG(t, filepath.Join(lc, "1091500", sha, "logo.png"), 1280, 400)
 	// Symlink escape attempts.
 	secret := filepath.Join(root, "config", "config.vdf")
@@ -81,11 +84,13 @@ func fixture(t *testing.T) string {
 	_ = os.Symlink(filepath.Join(root, "config"), filepath.Join(lc, "945360"))
 	// Shortcut grid artwork.
 	writePNG(t, filepath.Join(root, "userdata", "10000001", "config", "grid", "4244106195p.png"), 600, 900) // noisy alpha: falls back to JPEG
+	// A JPEG named .png (G15: Chrome's 3922850944p.png).
+	writeJPEG(t, filepath.Join(root, "userdata", "10000001", "config", "grid", "3922850944p.png"), 600, 900, "")
 	return root
 }
 
 func TestResolveAndReencode(t *testing.T) {
-	src := New(fixture(t), func(id uint32) bool { return id == 4244106195 })
+	src := New(fixture(t), func(id uint32) bool { return id == 4244106195 || id == 3922850944 })
 	img, err := src.Get(413150, Capsule)
 	if err != nil {
 		t.Fatal(err)
@@ -109,6 +114,12 @@ func TestResolveAndReencode(t *testing.T) {
 	}
 	if g, err := src.Get(4244106195, Capsule); err != nil || g.Width != 600 {
 		t.Fatalf("shortcut grid %v", err)
+	}
+	if g, err := src.Get(3922850944, Capsule); err != nil || g.MIME != "image/jpeg" {
+		t.Fatalf("JPEG named .png: %v %+v", err, g)
+	}
+	if m, err := src.Get(204361, Capsule); err != nil || m.Width != 600 {
+		t.Fatalf("largest candidate must win: %v %+v", err, m)
 	}
 	for _, c := range []struct {
 		id   uint32
