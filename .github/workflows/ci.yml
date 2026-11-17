@@ -58,6 +58,25 @@ jobs:
           (cd apps/agent && "$(go env GOPATH)/bin/govulncheck" ./...)
           (cd packages/protocol && "$(go env GOPATH)/bin/govulncheck" ./...)
 
+  agent-release-dryrun:
+    name: Agent release dry run (ephemeral key)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: apps/agent/go.sum
+      - name: Build, sign with a throwaway key, verify
+        run: |
+          (cd apps/agent && go build -o /tmp/db ./cmd/deckbeacon)
+          /tmp/db release keygen --out /tmp/k.pem > /tmp/keygen.txt
+          export DECKBEACON_RELEASE_KEY="$(cat /tmp/k.pem)" VERIFY_PUB="$(tail -1 /tmp/keygen.txt)"
+          scripts/build_agent_release.sh /tmp/dist
+          # Tampering is caught.
+          echo x >> /tmp/dist/deckbeacon-linux-arm64
+          if /tmp/db release verify --pub "$VERIFY_PUB" --in /tmp/dist/release.json --sig /tmp/dist/release.json.sig deckbeacon-linux-arm64=/tmp/dist/deckbeacon-linux-arm64; then echo "tampered artifact accepted"; exit 1; fi
+
   protocol-python:
     name: Protocol contract (Python)
     runs-on: ubuntu-latest

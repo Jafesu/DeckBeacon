@@ -1,0 +1,47 @@
+name: Agent release
+# Publishes agent/vX.Y.Z when apps/agent/VERSION changes on main (ADR-0010 D1).
+# Releases are created by this workflow, so no tag pushes are needed.
+on:
+  push:
+    branches: [main]
+    paths: [apps/agent/VERSION]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: agent-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          cache-dependency-path: apps/agent/go.sum
+      - name: Skip if already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="$(tr -d '[:space:]' < apps/agent/VERSION)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "agent/v$v" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Build, sign, verify against the embedded key
+        if: steps.check.outputs.exists == 'false'
+        env:
+          DECKBEACON_RELEASE_KEY: ${{ secrets.DECKBEACON_RELEASE_KEY }}
+        run: |
+          if [ -z "$DECKBEACON_RELEASE_KEY" ]; then echo "::error::DECKBEACON_RELEASE_KEY secret missing: refusing to publish unsigned"; exit 1; fi
+          scripts/build_agent_release.sh dist
+      - name: Publish
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ steps.check.outputs.version }}"
+          pre=""; case "$v" in *-*) pre="--prerelease";; esac
+          gh release create "agent/v$v" $pre --target "$GITHUB_SHA" --title "DeckBeacon agent $v" \
+            --notes "Signed agent release. Verify with \`deckbeacon release verify\`. Install and update from Home Assistant (ADR-0010)." \
+            dist/deckbeacon-linux-amd64 dist/deckbeacon-linux-arm64 dist/release.json dist/release.json.sig
