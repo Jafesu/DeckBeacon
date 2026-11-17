@@ -1,0 +1,25 @@
+{
+  "name": "deckbeacon-cards",
+  "version": "0.1.0",
+  "description": "Optional Lovelace cards for the DeckBeacon Home Assistant integration (SteamOS devices).",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "main": "dist/deckbeacon-cards.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "axe-core": "^4.14.1",
+    "esbuild": "^0.25.12",
+    "happy-dom": "^18.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
