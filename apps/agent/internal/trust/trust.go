@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jafesu/deckbeacon/apps/agent/internal/fsutil"
@@ -19,11 +21,55 @@ import (
 // URL is one way to reach HA.
 type URL struct {
 	URL  string `json:"url"`
-	Kind string `json:"kind"` // internal | external | cloud | manual
+	Kind string `json:"kind"` // internal | external | cloud | manual | manual_remote | discovered
 }
 
 // Remote reports whether this URL counts as the remote transport.
-func (u URL) Remote() bool { return u.Kind == "external" || u.Kind == "cloud" }
+func (u URL) Remote() bool {
+	return u.Kind == "external" || u.Kind == "cloud" || u.Kind == "manual_remote"
+}
+
+var profileKinds = map[string]bool{"internal": true, "external": true, "cloud": true, "manual": true, "manual_remote": true}
+
+// ValidateProfile cleans a connection profile from HA (ADR-0011): http/https
+// only, no credentials, bounded, known kinds, duplicates dropped. It returns
+// an error if nothing usable remains, so callers never wipe a working list.
+func ValidateProfile(in []URL) ([]URL, error) {
+	var out []URL
+	seen := map[string]bool{}
+	for _, u := range in {
+		if len(out) == 8 || !profileKinds[u.Kind] || len(u.URL) > 512 {
+			continue
+		}
+		p, err := url.Parse(u.URL)
+		if err != nil || (p.Scheme != "http" && p.Scheme != "https") || p.Host == "" || p.User != nil || p.RawQuery != "" || p.Fragment != "" {
+			continue
+		}
+		clean := strings.TrimRight(p.String(), "/")
+		if seen[clean] {
+			continue
+		}
+		seen[clean] = true
+		out = append(out, URL{URL: clean, Kind: u.Kind})
+	}
+	if len(out) == 0 {
+		return nil, errors.New("trust: connection profile has no usable URL")
+	}
+	return out, nil
+}
+
+// SameURLs reports whether two profiles are identical (order matters).
+func SameURLs(a, b []URL) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 
 // Trust is the persisted pairing.
 type Trust struct {

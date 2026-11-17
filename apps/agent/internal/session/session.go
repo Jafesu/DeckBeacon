@@ -79,6 +79,13 @@ type Config struct {
 	// OnWelcome receives the connected integration's version and the policy's
 	// update channel ("" when HA does not send one).
 	OnWelcome func(integrationVersion, updateChannel string)
+	// NetChanged signals a network change (netwatch): check the session now.
+	NetChanged <-chan struct{}
+	// OnProfile persists a refreshed connection profile from HA (ADR-0011).
+	OnProfile func(urls []trust.URL)
+	// Discover finds HA on the LAN (mDNS) when every stored local URL fails.
+	// Only the pinned-key handshake makes a discovered URL usable.
+	Discover func(ctx context.Context) []trust.URL
 	// AckWait bounds how long a sleep/shutdown is held for HA's ack (default 3 s).
 	AckWait time.Duration
 	// Games provides game telemetry and library snapshots (nil: none).
@@ -122,7 +129,7 @@ func New(cfg Config) (*Client, error) {
 		cfg.TelemetryInterval = 30 * time.Second
 	}
 	if cfg.LocalProbeEvery <= 0 {
-		cfg.LocalProbeEvery = 5 * time.Minute
+		cfg.LocalProbeEvery = 30 * time.Second // ADR-0011: back to local within ~90 s
 	}
 	if cfg.Backoff == nil {
 		cfg.Backoff = DefaultBackoff
@@ -160,6 +167,66 @@ func (c *Client) setStatus(state, transport, url, lastErr string) {
 	}
 }
 
+// attemptURLs is one reconnect round: stored local URLs, then (only if they
+// all fail) LAN rediscovery, then remote URLs. It is consumed lazily so that
+// discovery only runs when needed.
+func (c *Client) attemptURLs(ctx context.Context) func(yield func(trust.URL) bool) {
+	return func(yield func(trust.URL) bool) {
+		var remote []trust.URL
+		tried := map[string]bool{}
+		hadLocal := false
+		for _, u := range c.orderedURLs() {
+			if u.Remote() {
+				remote = append(remote, u)
+				continue
+			}
+			hadLocal = true
+			tried[u.URL] = true
+			if !yield(u) {
+				return
+			}
+		}
+		if hadLocal && c.cfg.Discover != nil {
+			for _, u := range c.cfg.Discover(ctx) {
+				if tried[u.URL] {
+					continue
+				}
+				tried[u.URL] = true
+				u.Kind = "discovered"
+				if !yield(u) {
+					return
+				}
+			}
+		}
+		for _, u := range remote {
+			if !yield(u) {
+				return
+			}
+		}
+	}
+}
+
+// applyProfile adopts HA's current connection profile from the authenticated
+// welcome (ADR-0011). Invalid or empty profiles never wipe working URLs.
+func (c *Client) applyProfile(w welcomeBody) {
+	if w.ConnectionProfile == nil {
+		return
+	}
+	urls, err := trust.ValidateProfile(w.ConnectionProfile.URLs)
+	if err != nil {
+		c.cfg.Log.Warn("ignoring connection profile from Home Assistant", "err", err)
+		return
+	}
+	if trust.SameURLs(urls, c.cfg.Trust.URLs) {
+		return
+	}
+	c.cfg.Trust.URLs = urls
+	c.cfg.Log.Info("connection profile updated from Home Assistant", "urls", len(urls))
+	if c.cfg.OnProfile != nil {
+		c.cfg.OnProfile(urls)
+	}
+}
+
 func (c *Client) orderedURLs() []trust.URL {
 	var local, remote []trust.URL
 	for _, u := range c.cfg.Trust.URLs {
@@ -178,7 +245,7 @@ func (c *Client) Run(ctx context.Context) error {
 	c.setStatus("connecting", "", "", "")
 	for {
 		var lastErr error
-		for _, u := range c.orderedURLs() {
+		for u := range c.attemptURLs(ctx) {
 			started := c.cfg.Now()
 			err := c.connectOnce(ctx, u)
 			if errors.Is(err, ErrRevoked) {
@@ -188,7 +255,7 @@ func (c *Client) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			if errors.Is(err, errPreferLocal) || errors.Is(err, errResumed) {
+			if errors.Is(err, errPreferLocal) || errors.Is(err, errResumed) || errors.Is(err, errNetChanged) {
 				attempt, lastErr = 0, nil
 				break
 			}
@@ -234,12 +301,16 @@ func (c *Client) Run(ctx context.Context) error {
 			case <-wait:
 				attempt++
 				break waitLoop
+			case <-c.cfg.NetChanged:
+				attempt = 0 // a new network: try again now
+				break waitLoop
 			}
 		}
 	}
 }
 
 var (
+	errNetChanged  = errors.New("network changed and Home Assistant stopped answering")
 	errPreferLocal = errors.New("local transport available again")
 	errResumed     = errors.New("device resumed from sleep")
 	errSuspending  = errors.New("device is going to sleep or shutting down")
@@ -299,6 +370,9 @@ type welcomeBody struct {
 		Granted       []string `json:"granted"`
 		UpdateChannel string   `json:"update_channel"`
 	} `json:"policy"`
+	ConnectionProfile *struct {
+		URLs []trust.URL `json:"urls"`
+	} `json:"connection_profile"`
 }
 
 type errorBody struct {
@@ -314,7 +388,12 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	if u.Remote() {
 		transport = "remote"
 	}
-	dctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	// A LAN address that is unreachable must not stall failover (ADR-0011).
+	timeout := 5 * time.Second
+	if u.Remote() {
+		timeout = 20 * time.Second
+	}
+	dctx, cancel := context.WithTimeout(ctx, timeout)
 	ws, err := channel.Dial(dctx, u.URL, channel.PathSession)
 	if err != nil {
 		cancel()
@@ -338,7 +417,7 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	}
 	if _, err := conn.Send(dctx, "hello", helloBody{
 		AgentVersion: c.cfg.Hello.AgentVersion, Protocol: map[string]int{"min": 1, "max": 1}, Device: dev,
-		BootID: c.cfg.Hello.BootID, Session: map[string]any{"mode": mode, "transport": transport, "resume_after_event_seq": st.Acked},
+		BootID: c.cfg.Hello.BootID, Session: map[string]any{"mode": mode, "transport": transport, "via": u.Kind, "resume_after_event_seq": st.Acked},
 	}); err != nil {
 		cancel()
 		return err
@@ -375,6 +454,7 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	if c.cfg.OnWelcome != nil {
 		c.cfg.OnWelcome(w.IntegrationVersion, w.Policy.UpdateChannel)
 	}
+	c.applyProfile(w)
 	hb := time.Duration(w.HeartbeatS) * time.Second
 	c.setStatus("connected_"+transport, transport, u.URL, "")
 	c.cfg.Log.Info("connected", "transport", transport, "integration", w.IntegrationVersion)
@@ -423,6 +503,8 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	lastRx := c.cfg.Now()
 	var sentThrough uint64
 	localOK := 0
+	var netCheck <-chan time.Time // armed after a network change
+	var netPingAt time.Time
 	type held struct {
 		seq      uint64
 		ev       lifecycle.Event
@@ -585,6 +667,27 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			if _, err := conn.Send(ctx, "ping", map[string]any{}); err != nil {
 				return err
 			}
+		case <-c.cfg.NetChanged:
+			// The network changed under us: prove the session still works now
+			// instead of waiting for the heartbeat timeout (ADR-0011).
+			c.cfg.Log.Info("network changed; checking the session", "transport", transport)
+			netPingAt = c.cfg.Now()
+			if _, err := conn.Send(ctx, "ping", map[string]any{}); err != nil {
+				return fmt.Errorf("network changed: %w", err)
+			}
+			netCheck = time.After(5 * time.Second)
+			if transport == "remote" && c.localReachable(ctx) {
+				localOK++
+				if localOK >= 3 {
+					_ = conn.Close(websocket.StatusNormalClosure, "switching to local")
+					return errPreferLocal
+				}
+			}
+		case <-netCheck:
+			netCheck = nil
+			if lastRx.Before(netPingAt) {
+				return errNetChanged
+			}
 		case <-probe.C:
 			if transport != "remote" {
 				continue
@@ -594,7 +697,7 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			} else {
 				localOK = 0
 			}
-			if localOK >= 2 { // stability threshold before switching back
+			if localOK >= 3 { // stability threshold before switching back (ADR-0011)
 				_ = conn.Close(websocket.StatusNormalClosure, "switching to local")
 				return errPreferLocal
 			}

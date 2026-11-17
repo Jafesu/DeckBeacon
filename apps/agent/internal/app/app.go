@@ -26,6 +26,7 @@ import (
 	"github.com/jafesu/deckbeacon/apps/agent/internal/fsutil"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/games"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/identity"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/netwatch"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/pairing"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/paths"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/session"
@@ -207,6 +208,18 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 		_ = fsutil.WriteFileAtomic(filepath.Join(e.Dirs.Runtime, "status.json"), b, 0o600)
 	}
 	upd := newUpdateClient(e, prov.Busy, connected.Load, func() string { return integration.Load().(string) })
+	netChanged := netwatch.Watch(ctx, filepath.Join(e.Host.Root, "proc"), 3*time.Second, netwatch.SystemAddrs)
+	discover := func(ctx context.Context) []trust.URL {
+		found, err := discovery.Browse(ctx, discovery.MulticastAddr, 3*time.Second)
+		if err != nil {
+			return nil
+		}
+		var out []trust.URL
+		for _, f := range found {
+			out = append(out, trust.URL{URL: f.URL, Kind: "discovered"})
+		}
+		return out
+	}
 	go upd.Run(ctx)
 	disp.Register("approve_agent_update", "updates", upd.ApproveHandler())
 	for {
@@ -228,6 +241,14 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 					return append(append(lifecycleCapabilities(lcCaps, svc), prov.Capabilities()...), upd.Capabilities()...)
 				},
 				ExtraMetrics: upd.Metrics,
+				NetChanged:   netChanged,
+				Discover:     discover,
+				OnProfile: func(urls []trust.URL) {
+					tr.URLs = urls
+					if err := trust.Save(e.Dirs.State, tr); err != nil {
+						e.Log.Warn("could not save the refreshed connection profile", "err", err)
+					}
+				},
 				OnWelcome: func(integrationVersion, channel string) {
 					integration.Store(integrationVersion)
 					upd.SetChannel(channel)

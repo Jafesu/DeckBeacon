@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -44,6 +45,11 @@ type Server struct {
 	conns       []*websocket.Conn
 	Heartbeat   int
 	Invalid     []string // schema violations seen (must stay empty)
+	// Profile, when set, is sent as welcome.connection_profile (ADR-0011).
+	Profile []map[string]string
+	// Mute makes established sessions stop answering (no pong, no ack): a
+	// network that silently drops traffic while TCP looks alive.
+	Mute atomic.Bool
 }
 
 // New starts the fake on a random port.
@@ -246,8 +252,14 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	last := s.LastEvent
 	s.mu.Unlock()
-	_ = p.send(ctx, "welcome", map[string]any{"protocol": 1, "integration_version": "0.0.0", "heartbeat_s": s.Heartbeat, "last_received_event_seq": last,
-		"policy": map[string]any{"transport": "local", "granted": []string{"monitoring"}}})
+	welcome := map[string]any{"protocol": 1, "integration_version": "0.0.0", "heartbeat_s": s.Heartbeat, "last_received_event_seq": last,
+		"policy": map[string]any{"transport": "local", "granted": []string{"monitoring"}}}
+	s.mu.Lock()
+	if s.Profile != nil {
+		welcome["connection_profile"] = map[string]any{"urls": s.Profile}
+	}
+	s.mu.Unlock()
+	_ = p.send(ctx, "welcome", welcome)
 	in := make(chan Msg, 16)
 	go func() {
 		for {
@@ -264,6 +276,9 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 		case m, ok := <-in:
 			if !ok {
 				return
+			}
+			if s.Mute.Load() {
+				continue
 			}
 			switch m.Type {
 			case "event":

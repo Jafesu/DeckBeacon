@@ -30,7 +30,8 @@
       "session": {
         "mode": "gaming",
         "transport": "local",
-        "resume_after_event_seq": 41
+        "resume_after_event_seq": 41,
+        "via": "cloud"
       }
     }
   }
