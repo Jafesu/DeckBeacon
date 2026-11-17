@@ -30,6 +30,7 @@ from homeassistant.helpers.storage import Store
 from jsonschema import Draft202012Validator
 
 from . import noise
+from .artwork import ArtworkStore, ArtworkView
 from .const import (
     COMMAND_ACK_TIMEOUT,
     CONF_DEVICE_ID,
@@ -127,6 +128,7 @@ class DeviceRuntime:
         self.options_snapshot: dict[str, Any] = {}
         self._store: Store = Store(hass, 1, f"{DOMAIN}.events.{entry.entry_id}")
         self._supersedes: list[float] = []
+        self.artwork = ArtworkStore(self)
 
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
@@ -318,6 +320,7 @@ class Hub:
         self.validator = await self.hass.async_add_executor_job(load_validator)
         self.hass.http.register_view(PairView(self))
         self.hass.http.register_view(SessionView(self))
+        self.hass.http.register_view(ArtworkView(self))
 
     # ---- pairing windows -------------------------------------------------
     def open_window(self, flow_id: str) -> PairingWindow:
@@ -594,6 +597,8 @@ class SessionView(_DeviceView):
                 runtime.hass.bus.async_fire(f"{DOMAIN}_command_result", {"device_id": runtime.device_id, **body})
             case "library":
                 runtime.apply_library(body)
+            case "artwork":
+                runtime.artwork.add_chunk(body)
             case "pong" | "ack" | "error":
                 pass
             case _:
@@ -618,6 +623,8 @@ _KNOWN_TYPES = {
     "pair_confirm",
     "pair_complete",
     "pair_abort",
+    "library",
+    "artwork",
 }
 
 

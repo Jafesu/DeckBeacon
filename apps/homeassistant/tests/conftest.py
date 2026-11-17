@@ -19,5 +19,9 @@ async def client(hass, hass_client_no_auth):
     from custom_components.deckbeacon.hub import async_get_hub
 
     assert await async_setup_component(hass, "http", {})
+    # Real HA loads websocket_api at startup; it must exist before the test
+    # server freezes the router (DeckBeacon depends on it for the card API).
+    assert await async_setup_component(hass, "websocket_api", {})
+    assert await async_setup_component(hass, "image", {})
     await async_get_hub(hass)
     return await hass_client_no_auth()

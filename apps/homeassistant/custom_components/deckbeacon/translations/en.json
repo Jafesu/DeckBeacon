@@ -208,6 +208,11 @@
       "launch_game": {
         "name": "Launch game"
       }
+    },
+    "image": {
+      "now_playing_artwork": {
+        "name": "Now playing artwork"
+      }
     }
   },
   "options": {
