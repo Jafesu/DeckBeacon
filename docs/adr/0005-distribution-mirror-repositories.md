@@ -22,3 +22,6 @@ Status: Accepted (approved by project owner 2026-11-16; see docs/research/M0-dec
 
 ## Validation
 M10 dry run: Marketplace "custom repository" install of the mirror, plus Decky zip-URL install.
+
+## Update (2026-11-17, M8): mirrors created early
+The owner created `deckbeacon-homeassistant`, `deckbeacon-card` and `deckbeacon-decky` (all public) so the integration and cards can be installed and updated through the Marketplace during development instead of copying files. `scripts/build_mirrors.py` generates their contents. Each mirror has a release workflow that checks the tag against the packaged version and publishes the release. Until the M10 CI publisher exists (it needs an owner-created token), mirrors are pushed from a development session. The card bundle is `deckbeacon-cards.js` (`filename` in `hacs.json`).
