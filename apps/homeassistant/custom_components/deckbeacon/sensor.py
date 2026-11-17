@@ -147,6 +147,12 @@ METRICS: dict[str, MetricDescription] = {
         MetricDescription(key="library.games", translation_key="installed_games", state_class=_M),
         MetricDescription(key="library.updates", translation_key="updates_available", state_class=_M),
         MetricDescription(key="library.shortcuts", translation_key="shortcuts", state_class=_M),
+        # ADR-0007 P1 (experimental, opt-in on the device): text set by the game, shown as-is.
+        MetricDescription(key="game.activity.details", translation_key="activity_details"),
+        MetricDescription(key="game.activity.state", translation_key="activity_state"),
+        MetricDescription(key="game.activity.party_size", translation_key="activity_party_size"),
+        MetricDescription(key="game.activity.party_max", translation_key="activity_party_max"),
+        MetricDescription(key="game.activity.started_at", translation_key="activity_started", device_class=SensorDeviceClass.TIMESTAMP, convert=_ts),
         MetricDescription(
             key="steam.ui_mode",
             translation_key="steam_ui_mode",

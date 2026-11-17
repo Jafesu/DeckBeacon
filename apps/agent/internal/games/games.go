@@ -39,6 +39,14 @@ type Config struct {
 	Launch     Launcher
 	Now        func() time.Time
 	Log        *slog.Logger
+	// Activity is the optional rich-presence source (ADR-0007, opt-in).
+	Activity ActivitySource
+}
+
+// ActivitySource reports game activity metrics (Discord IPC proxy).
+type ActivitySource interface {
+	Metrics() []collect.Metric
+	Capabilities() []collect.Capability
 }
 
 // Provider is safe for concurrent use.
@@ -219,6 +227,9 @@ func (p *Provider) Metrics() []collect.Metric {
 		return x
 	}
 	var out []collect.Metric
+	if p.cfg.Activity != nil {
+		out = append(out, p.cfg.Activity.Metrics()...)
+	}
 	if s := p.tracker.Current(); s != nil {
 		out = append(out,
 			m("game.current.app_id", s.AppID, "", ""),
@@ -329,6 +340,14 @@ func (p *Provider) Revision() uint64 {
 
 // Capabilities reports what the game provider can do here.
 func (p *Provider) Capabilities() []collect.Capability {
+	var extra []collect.Capability
+	if p.cfg.Activity != nil {
+		extra = p.cfg.Activity.Capabilities()
+	}
+	return append(p.capabilities(), extra...)
+}
+
+func (p *Provider) capabilities() []collect.Capability {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.cfg.SteamRoot == "" {

@@ -1,6 +1,6 @@
 # Milestone 6 — Game Library, Sessions, Downloads, Launch, Activity: Plan
 
-Status: **In progress** (started 2026-11-17; owner: "Lets go with M6", plus a request for rich-presence-style details → ADR-0007)
+Status: **Implemented, G15 validation pending** (started 2026-11-17; owner: "Lets go with M6", plus a request for rich-presence-style details → ADR-0007)
 
 Spec 06 lists the areas. The roadmap says: library and sessions first, then downloads and launch. Destructive operations (move, uninstall, compat-tool change) are not in M6: they stay ADR-0004 Tier C, M4/experimental.
 

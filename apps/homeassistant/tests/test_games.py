@@ -181,3 +181,23 @@ async def test_ui_mode_and_session_sensors(hass: HomeAssistant, client) -> None:
     await settle(hass)
     assert st(hass, agent.device_id, "steam_ui_mode") == "unknown"
     assert st(hass, agent.device_id, "session_type") in ("unknown", "unavailable")
+
+
+async def test_activity_sensors(hass: HomeAssistant, client) -> None:
+    agent, entry, device_id, _ = await setup(hass, client)
+    await agent.telemetry(
+        [
+            {"key": "game.activity.details", "value": "Night City — Watson"},
+            {"key": "game.activity.state", "value": "Act 1"},
+            {"key": "game.activity.party_size", "value": 2},
+            {"key": "game.activity.party_max", "value": 4},
+            {"key": "game.activity.started_at", "value": "2026-11-17T02:15:18Z"},
+        ]
+    )
+    await settle(hass)
+    assert st(hass, agent.device_id, "game_activity_details") == "Night City — Watson"
+    assert st(hass, agent.device_id, "game_activity_party_max") == "4"
+    none = {"value": None, "reason": "no activity from the running game"}
+    await agent.telemetry([{"key": "game.activity.details", **none}, {"key": "game.activity.state", **none}])
+    await settle(hass)
+    assert st(hass, agent.device_id, "game_activity_details") == "unavailable"  # AC6: never guessed

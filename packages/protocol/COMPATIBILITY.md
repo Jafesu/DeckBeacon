@@ -40,4 +40,4 @@ Remove or rename a field; make an optional field required; change a type or mean
 - **1.0+pairing** (M2): `pair_request`, `pair_confirm`, `pair_complete`, `pair_abort` (additive).
 - **1.1** (M3): event type `device_booted` (additive).
 - **1.2** (M6): message type `library` (paged snapshot, no account data). Telemetry keys `game.*`, `library.*`, `downloads.*` (additive). Older receivers treat it as an unknown event type (logged, skipped).
-- **1.3** (M6, ADR-0008): library entry `kind` value `"shortcut"` (non-Steam games, unsigned 32-bit `app_id`). Telemetry keys `library.shortcuts`, `steam.ui_mode`, `session.type` (additive).
+- **1.3** (M6, ADR-0008): library entry `kind` value `"shortcut"` (non-Steam games, unsigned 32-bit `app_id`). Telemetry keys `library.shortcuts`, `steam.ui_mode`, `session.type` (additive). Telemetry keys `game.activity.*` and capability tier `ipc` (ADR-0007, additive).

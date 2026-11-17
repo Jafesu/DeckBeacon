@@ -174,7 +174,12 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 	defer stopLC()
 	svc, _ := serviceManager(e)
 	home, _ := os.UserHomeDir()
-	prov := games.New(games.Config{SteamRoot: steam.SteamRoot(home), ProcRoot: filepath.Join(e.Host.Root, "proc"), Log: e.Log})
+	gcfg := games.Config{SteamRoot: steam.SteamRoot(home), ProcRoot: filepath.Join(e.Host.Root, "proc"), Log: e.Log}
+	if ap := startActivity(e); ap != nil {
+		defer ap.Close()
+		gcfg.Activity = ap
+	}
+	prov := games.New(gcfg)
 	go prov.Run(ctx)
 	disp := dispatch.New(st, time.Now)
 	disp.Register("launch_game", "game_management", prov.LaunchHandler())

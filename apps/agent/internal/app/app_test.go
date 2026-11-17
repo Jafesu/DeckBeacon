@@ -1,13 +1,18 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"io"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/jafesu/deckbeacon/apps/agent/internal/lifecycle"
+	"github.com/jafesu/deckbeacon/apps/agent/internal/paths"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/service"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/store"
 )
@@ -93,5 +98,30 @@ func TestPinnedBootTimeStableAcrossRestarts(t *testing.T) {
 	}
 	if got := pinnedBootTime(st, "b2", first.Add(time.Hour)); !got.Equal(first.Add(time.Hour)) {
 		t.Fatal("new boot must take the new time")
+	}
+}
+
+func TestActivityToggle(t *testing.T) {
+	dir := t.TempDir()
+	var out bytes.Buffer
+	e := Env{Dirs: paths.Dirs{Config: filepath.Join(dir, "c"), State: filepath.Join(dir, "s"), Runtime: filepath.Join(dir, "r")}, Stdout: &out, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	if loadActivityConfig(e).DiscordProxy || startActivity(e) != nil {
+		t.Fatal("the proxy must be off by default")
+	}
+	if err := Activity(e, "on"); err != nil {
+		t.Fatal(err)
+	}
+	if !loadActivityConfig(e).DiscordProxy {
+		t.Fatal("on not persisted")
+	}
+	if fi, _ := os.Stat(activityPath(e)); fi.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", fi.Mode().Perm())
+	}
+	_ = Activity(e, "off")
+	if loadActivityConfig(e).DiscordProxy {
+		t.Fatal("off not persisted")
+	}
+	if Activity(e, "maybe") == nil {
+		t.Fatal("bad action accepted")
 	}
 }

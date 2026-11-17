@@ -15,7 +15,7 @@
         "properties": {
           "id": {"$ref": "common.schema.json#/$defs/key"},
           "status": {"$ref": "common.schema.json#/$defs/capability_status"},
-          "tier": {"enum": ["files", "steam_url", "decky_steamclient", "system", "none"]},
+          "tier": {"enum": ["files", "steam_url", "decky_steamclient", "system", "ipc", "none"]},
           "experimental": {"type": "boolean"},
           "source": {"$ref": "common.schema.json#/$defs/short_text"},
           "privilege": {"enum": ["none", "user", "polkit_active_session", "decky"]},

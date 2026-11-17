@@ -28,3 +28,12 @@ Activity details are an **optional, layered** feature. Each source is a separate
 
 ## Validation
 G15 discovery (`docs/research/evidence/G15-m6-discovery-2026-11-17.md`). A unit test of the IPC framing against recorded/spec frames. A live test with a Discord-RPC-enabled game on the G15 when available.
+
+## Implementation note (M6 WP8, 2026-11-17)
+`internal/activity` implements P1. The choices made while building it:
+- **Forward-only.** With no Discord client running, the proxy closes the game's connection, exactly as if no Discord existed. It never answers READY itself, so it never stands in for Discord.
+- **Upstream search:** the other standard slots, plus Flatpak (`app/com.discordapp.Discord`, `…DiscordCanary`, `dev.vencord.Vesktop`) and Snap (`snap.discord`) sockets. On the G15, Discord is a Flatpak with no socket at the standard path. There the proxy takes slot 0, so native games, which previously couldn't see Discord at all, now reach it through DeckBeacon.
+- **Socket handling:** a stale socket (connection refused) is replaced. A live socket or a non-socket file is never touched. Our socket is mode 0600 and is removed on shutdown.
+- **Payload limits:** frames over 1 MiB close the connection. Only frames up to 64 KiB are inspected. Text is sanitized: valid UTF-8, no control/format/bidi characters, at most 128 runes. Assets, URLs, buttons and secrets are ignored.
+- **Opt-in:** on the device only: `deckbeacon activity on`, written to `~/.config/deckbeacon/activity.json`. HA cannot enable it.
+- **Metrics:** `game.activity.details|state|party_size|party_max|started_at`. They are null with a reason when there is no data. When the proxy is off, the keys are never sent, so no sensors appear.
