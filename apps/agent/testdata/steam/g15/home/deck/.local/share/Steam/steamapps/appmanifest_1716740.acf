@@ -1,0 +1,23 @@
+"AppState"
+{
+	"appid"		"1716740"
+	"Universe"		"1"
+	"name"		"Starfield"
+	"StateFlags"		"1048582"
+	"installdir"		"Starfield"
+	"LastUpdated"		"1794702189"
+	"LastPlayed"		"0"
+	"SizeOnDisk"		"153091858045"
+	"buildid"		"1"
+	"LastOwner"		"76561190000000000"
+	"BytesToDownload"		"112457745152"
+	"BytesDownloaded"		"28114436288"
+	"InstalledDepots"
+	{
+		"1716741"
+		{
+			"manifest"		"1"
+			"size"		"1"
+		}
+	}
+}

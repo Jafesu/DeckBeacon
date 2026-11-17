@@ -1,0 +1,23 @@
+"AppState"
+{
+	"appid"		"204360"
+	"Universe"		"1"
+	"name"		"Castle Crashers"
+	"StateFlags"		"4"
+	"installdir"		"Castle Crashers"
+	"LastUpdated"		"1794687590"
+	"LastPlayed"		"1794877240"
+	"SizeOnDisk"		"125194873"
+	"buildid"		"1"
+	"LastOwner"		"76561190000000000"
+	"BytesToDownload"		"2225648"
+	"BytesDownloaded"		"2225648"
+	"InstalledDepots"
+	{
+		"204361"
+		{
+			"manifest"		"1"
+			"size"		"1"
+		}
+	}
+}

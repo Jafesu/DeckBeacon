@@ -1,0 +1,23 @@
+"AppState"
+{
+	"appid"		"413150"
+	"Universe"		"1"
+	"name"		"Stardew Valley"
+	"StateFlags"		"4"
+	"installdir"		"Stardew Valley"
+	"LastUpdated"		"1794696775"
+	"LastPlayed"		"0"
+	"SizeOnDisk"		"708901690"
+	"buildid"		"1"
+	"LastOwner"		"76561190000000000"
+	"BytesToDownload"		"649865088"
+	"BytesDownloaded"		"649865088"
+	"InstalledDepots"
+	{
+		"413151"
+		{
+			"manifest"		"1"
+			"size"		"1"
+		}
+	}
+}
