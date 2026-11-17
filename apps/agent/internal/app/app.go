@@ -129,7 +129,7 @@ func Pair(ctx context.Context, e Env, baseURL, name string) error {
 	if err := trust.Save(e.Dirs.State, tr); err != nil {
 		return err
 	}
-	fmt.Fprintf(e.Stdout, "Paired with %q. Device ID: %s\nStart the agent with: systemctl --user enable --now deckbeacon.service\n", tr.InstanceName, id.DeviceID)
+	fmt.Fprintf(e.Stdout, "Paired with %q. Device ID: %s\nStart the agent as a background service with: deckbeacon service install   (add --at-boot to start before login)\n", tr.InstanceName, id.DeviceID)
 	return nil
 }
 

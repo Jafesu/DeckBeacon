@@ -16,7 +16,7 @@ RestartSec=5s
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
-ReadWritePaths=%h/.local/state/deckbeacon %h/.config/deckbeacon %t
+ReadWritePaths=-%h/.local/state/deckbeacon -%h/.config/deckbeacon -%t
 UMask=0077
 
 [Install]
