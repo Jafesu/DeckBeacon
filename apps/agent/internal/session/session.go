@@ -233,6 +233,7 @@ var (
 // attempts while the system goes down). If the sleep never happens (cancelled,
 // or a shutdown was aborted), the fallback timer reconnects anyway.
 func (c *Client) awaitResume(ctx context.Context, fallback time.Duration) error {
+	c.cfg.Log.Info("waiting for resume before reconnecting")
 	t := time.NewTimer(fallback)
 	defer t.Stop()
 	for {
@@ -258,6 +259,10 @@ func (c *Client) recordLifecycle(ev lifecycle.Event) uint64 {
 	if ev.Gap > 0 {
 		data["suspended_s"] = int(ev.Gap.Seconds())
 	}
+	if ev.ShutdownType != "" {
+		data["kind"] = ev.ShutdownType
+	}
+	c.cfg.Log.Info("lifecycle", "event", typ, "source", ev.Source, "kind", ev.ShutdownType)
 	return c.appendEvent(typ, data)
 }
 
@@ -403,20 +408,24 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 	releaseAcked := func(force bool) bool {
 		st, _ := c.cfg.Store.Stats()
 		kept := holding[:0]
-		var ready []lifecycle.Event
+		var ready []held
 		for _, h := range holding {
 			if force || st.Acked >= h.seq || c.cfg.Now().After(h.deadline) {
-				ready = append(ready, h.ev)
+				ready = append(ready, h)
 				continue
 			}
 			kept = append(kept, h)
 		}
 		holding = kept
 		if len(ready) > 0 && !force {
-			_ = conn.Close(websocket.StatusGoingAway, "suspending")
+			// Best effort only: NetworkManager tears Wi-Fi down in parallel
+			// (observed on the G15), so the close may never arrive. HA expects the
+			// drop after the announcement; never hold the system for the close.
+			c.cfg.Log.Info("closing session before sleep/shutdown", "acked", st.Acked >= ready[0].seq)
+			go conn.Close(websocket.StatusGoingAway, "suspending")
 		}
-		for _, ev := range ready {
-			ev.Ready()
+		for _, h := range ready {
+			h.ev.Ready()
 		}
 		return len(ready) > 0
 	}

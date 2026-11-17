@@ -106,7 +106,9 @@
           "on": "On",
           "suspended": "Suspended",
           "shutting_down": "Shutting down",
-          "unknown": "Unknown"
+          "unknown": "Unknown",
+          "rebooting": "Rebooting",
+          "off": "Off"
         }
       }
     },

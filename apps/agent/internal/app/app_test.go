@@ -77,3 +77,21 @@ func TestMergeLifecycleIgnoresClockWhenLogindPresent(t *testing.T) {
 		}
 	}
 }
+
+func TestPinnedBootTimeStableAcrossRestarts(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "s.db"), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	first := time.Date(2026, 11, 17, 0, 40, 42, 0, time.UTC)
+	if got := pinnedBootTime(st, "b1", first); !got.Equal(first) {
+		t.Fatal(got)
+	}
+	if got := pinnedBootTime(st, "b1", first.Add(time.Second)); !got.Equal(first) { // btime moved by 1 s
+		t.Fatalf("boot time moved to %v", got)
+	}
+	if got := pinnedBootTime(st, "b2", first.Add(time.Hour)); !got.Equal(first.Add(time.Hour)) {
+		t.Fatal("new boot must take the new time")
+	}
+}

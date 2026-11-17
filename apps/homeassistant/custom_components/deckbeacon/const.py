@@ -29,3 +29,8 @@ CONF_METRIC_KEYS: Final = "metric_keys"
 EVENT_DEVICE: Final = "deckbeacon_event"
 SIGNAL_UPDATE: Final = "deckbeacon_update_{}"
 SIGNAL_NEW_METRIC: Final = "deckbeacon_new_metric_{}"
+
+# After a live sleep/shutdown announcement the device is expected to vanish
+# (NetworkManager may drop Wi-Fi before the agent can close the session, as
+# observed on the Dell G15): stop waiting for heartbeats after this grace period.
+EXPECTED_DROP_GRACE: Final = 5.0

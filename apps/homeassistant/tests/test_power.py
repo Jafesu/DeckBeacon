@@ -109,3 +109,47 @@ async def test_announced_suspend_survives_reload(hass: HomeAssistant, client) ->
     await agent.connect(client)  # wake
     await settle(hass)
     assert st(hass, agent.device_id, "power_state") == "on"
+
+
+async def test_shutdown_becomes_off_and_reboot_stays_rebooting(hass: HomeAssistant, client) -> None:
+    agent = SimAgent()
+    await pair(hass, client, agent)
+    # Power-off: announced, then the connection closes -> "off".
+    await agent.connect(client)
+    await agent.event("device_shutting_down", {"source": "logind", "kind": "power-off"})
+    await agent.recv()
+    await settle(hass)
+    assert st(hass, agent.device_id, "power_state") == "shutting_down"
+    await agent.close()
+    await settle(hass)
+    assert st(hass, agent.device_id, "power_state") == "off"
+    # Reboot: "rebooting" survives the drop until the device is back.
+    await agent.connect(client)
+    await agent.event("device_shutting_down", {"source": "logind", "kind": "reboot"})
+    await agent.recv()
+    await agent.close()
+    await settle(hass)
+    assert st(hass, agent.device_id, "power_state") == "rebooting"
+    await agent.connect(client)
+    await settle(hass)
+    assert st(hass, agent.device_id, "power_state") == "on"
+
+
+async def test_expected_drop_detected_without_close(hass: HomeAssistant, client, monkeypatch) -> None:
+    """G15: Wi-Fi went down before the agent could close; HA must not wait 45 s."""
+    from custom_components.deckbeacon import hub as hub_mod
+
+    monkeypatch.setattr(hub_mod, "EXPECTED_DROP_GRACE", 0.3)
+    agent = SimAgent()
+    await pair(hass, client, agent)
+    await agent.connect(client)
+    await agent.event("device_suspending", {"source": "logind"})
+    await agent.recv()
+    # The agent goes silent without closing (network already gone).
+    for _ in range(40):
+        await asyncio.sleep(0.05)
+        await hass.async_block_till_done()
+        if st(hass, agent.device_id, "connection") == "offline":
+            break
+    assert st(hass, agent.device_id, "connection") == "offline"
+    assert st(hass, agent.device_id, "power_state") == "suspended"

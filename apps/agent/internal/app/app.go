@@ -160,6 +160,8 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 	defer st.Close()
 	sys := collect.NewSystem(e.Host)
 	if bt, err := sys.BootTime(); err == nil {
+		bt = pinnedBootTime(st, bootID(e.Host), bt)
+		sys.PinBootTime(bt)
 		if booted, err := detectBoot(st, bootID(e.Host), bt, time.Now()); err != nil {
 			e.Log.Warn("boot detection", "err", err)
 		} else if booted {
@@ -334,4 +336,16 @@ func Probe(ctx context.Context, e Env, asJSON bool) error {
 		fmt.Fprintf(e.Stdout, "  %-26s %-12s %s\n", c.ID, c.Status, c.Reason)
 	}
 	return nil
+}
+
+// pinnedBootTime returns the boot time first recorded for this boot_id, so an
+// agent restart after an NTP step never moves "Last boot" (seen on the G15).
+func pinnedBootTime(st *store.Store, bootID string, current time.Time) time.Time {
+	if v, _ := st.Meta("boot_time:" + bootID); v != "" {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			return t
+		}
+	}
+	_ = st.SetMeta("boot_time:"+bootID, current.UTC().Format(time.RFC3339))
+	return current
 }

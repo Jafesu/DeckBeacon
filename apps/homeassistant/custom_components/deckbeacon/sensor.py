@@ -207,7 +207,7 @@ class PowerStateSensor(DeckBeaconEntity, SensorEntity):
 
     _attr_translation_key = "power_state"
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["on", "suspended", "shutting_down", "unknown"]
+    _attr_options = ["on", "suspended", "shutting_down", "rebooting", "off", "unknown"]
 
     def __init__(self, runtime) -> None:
         super().__init__(runtime, "power_state")

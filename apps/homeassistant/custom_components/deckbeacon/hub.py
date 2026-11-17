@@ -36,6 +36,7 @@ from .const import (
     CONF_METRIC_KEYS,
     DOMAIN,
     EVENT_DEVICE,
+    EXPECTED_DROP_GRACE,
     HANDSHAKE_TIMEOUT,
     HEARTBEAT_SECONDS,
     HELLO_TIMEOUT,
@@ -113,6 +114,7 @@ class DeviceRuntime:
         self.last_event_seq = 0
         # Physical power state, distinct from connection state (spec 01 invariant).
         self.power_state = "unknown"
+        self.expect_drop_at: float | None = None  # monotonic deadline after an announced sleep/shutdown
         self._store: Store = Store(hass, 1, f"{DOMAIN}.events.{entry.entry_id}")
         self._supersedes: list[float] = []
 
@@ -122,7 +124,7 @@ class DeviceRuntime:
         # Restore an announced state (e.g. "suspended") across reloads and HA
         # restarts; found on the G15 when a reload erased a live "suspended".
         restored = data.get("power_state")
-        if restored in ("suspended", "shutting_down"):
+        if restored in _STICKY_POWER_STATES:
             self.power_state = restored
 
     @property
@@ -160,6 +162,7 @@ class DeviceRuntime:
         self.channel = channel
         self.hello = hello
         self._set_power("on")  # it is talking to us
+        self.expect_drop_at = None
         self.transport = hello["session"]["transport"]
         self.connected_since = self.last_seen = datetime.now(UTC)
         self.notify()
@@ -168,9 +171,13 @@ class DeviceRuntime:
         if self.channel is channel:
             self.channel = None
             self.transport = None
-            # Keep an announced suspend/shutdown; an unannounced drop proves nothing
-            # about power (Wi-Fi loss, crash, HA restart...), so it becomes unknown.
-            if self.power_state not in ("suspended", "shutting_down"):
+            # An announced power-off that is followed by the drop means "off". An
+            # announced suspend/reboot stays as announced. An unannounced drop proves
+            # nothing about power (Wi-Fi loss, crash, HA restart...): unknown.
+            self.expect_drop_at = None
+            if self.power_state == "shutting_down":
+                self._set_power("off")
+            elif self.power_state not in _STICKY_POWER_STATES:
                 self._set_power("unknown")
             self.notify()
 
@@ -197,6 +204,10 @@ class DeviceRuntime:
         self.last_event_seq = seq
         if event["live"]:  # backfilled lifecycle events are history, not current state
             new_state = _POWER_EVENTS.get(event["event_type"])
+            if event["event_type"] == "device_shutting_down" and event["data"].get("kind") in _REBOOT_KINDS:
+                new_state = "rebooting"
+            if new_state in ("suspended", "shutting_down", "rebooting"):
+                self.expect_drop_at = time.monotonic() + EXPECTED_DROP_GRACE
             if new_state is not None and new_state != self.power_state:
                 self._set_power(new_state)
                 self.notify()
@@ -220,6 +231,8 @@ class DeviceRuntime:
         await self._store.async_save(self._data())
 
 
+_STICKY_POWER_STATES = ("suspended", "shutting_down", "rebooting", "off")
+_REBOOT_KINDS = ("reboot", "soft-reboot", "kexec")
 _POWER_EVENTS = {
     "device_suspending": "suspended",
     "device_shutting_down": "shutting_down",
@@ -486,8 +499,11 @@ class SessionView(_DeviceView):
                 },
             )
             while True:
+                timeout = 3 * HEARTBEAT_SECONDS
+                if runtime.expect_drop_at is not None:
+                    timeout = max(0.0, min(timeout, runtime.expect_drop_at - time.monotonic()))
                 try:
-                    msg = await ch.recv(3 * HEARTBEAT_SECONDS)
+                    msg = await ch.recv(timeout)
                 except InvalidMessage as err:
                     # Lenient receiver (COMPATIBILITY.md).
                     seq = _unknown_event_seq(self.hub.validator, err.env)

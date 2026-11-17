@@ -189,3 +189,55 @@ func TestClockWatchRunStops(t *testing.T) {
 	defer cancel()
 	c.Run(ctx) // must return
 }
+
+func (f *fakeLogind) emitMeta(t *testing.T, kind string) {
+	t.Helper()
+	if err := f.conn.Emit(logindPath, logindIface+".PrepareForShutdownWithMetadata", true, map[string]dbus.Variant{"type": dbus.MakeVariant(kind)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLogindShutdownTypeFromMetadata(t *testing.T) {
+	addr := privateBus(t)
+	fake := startFake(t, addr)
+	l, err := ConnectLogind(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	<-fake.inhibits
+	<-fake.held
+	fake.handOver(t, l)
+	// systemd 261 (G15) emits both signals back to back: exactly one event, with the type.
+	fake.emit(t, "PrepareForShutdown", true)
+	fake.emitMeta(t, "reboot")
+	ev := <-l.Events()
+	if ev.Kind != Shutdown || ev.ShutdownType != "reboot" {
+		t.Fatalf("event %+v", ev)
+	}
+	ev.Ready()
+	select {
+	case extra := <-l.Events():
+		t.Fatalf("duplicate shutdown event %+v", extra)
+	case <-time.After(400 * time.Millisecond):
+	}
+}
+
+func TestLogindPlainShutdownWithoutMetadata(t *testing.T) {
+	addr := privateBus(t)
+	fake := startFake(t, addr)
+	l, err := ConnectLogind(addr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	<-fake.inhibits
+	<-fake.held
+	fake.handOver(t, l)
+	fake.emit(t, "PrepareForShutdown", true) // older systemd: no metadata variant
+	ev := <-l.Events()
+	if ev.Kind != Shutdown || ev.ShutdownType != "" {
+		t.Fatalf("event %+v", ev)
+	}
+	ev.Ready()
+}

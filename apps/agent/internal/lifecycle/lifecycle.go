@@ -28,8 +28,11 @@ type Event struct {
 	Source     string // "logind" | "clock"
 	Confidence string // "confirmed" | "heuristic"
 	Gap        time.Duration
-	ready      func()
-	once       *sync.Once
+	// ShutdownType is logind's metadata "type" (reboot, power-off, soft-reboot,
+	// kexec, halt) when the system provides it; empty otherwise.
+	ShutdownType string
+	ready        func()
+	once         *sync.Once
 }
 
 // Ready releases the delay inhibitor held for this transition (idempotent).

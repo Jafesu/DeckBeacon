@@ -42,7 +42,7 @@ func ConnectLogind(addr string) (*Logind, error) {
 	}
 	l := &Logind{conn: conn, ch: make(chan Event, 4), sig: make(chan *dbus.Signal, 8)}
 	l.SetMaxDelay(4 * time.Second) // below logind's default InhibitDelayMaxSec (5 s)
-	for _, member := range []string{"PrepareForSleep", "PrepareForShutdown"} {
+	for _, member := range []string{"PrepareForSleep", "PrepareForShutdown", "PrepareForShutdownWithMetadata"} {
 		if err := conn.AddMatchSignal(dbus.WithMatchObjectPath(logindPath), dbus.WithMatchInterface(logindIface), dbus.WithMatchMember(member)); err != nil {
 			conn.Close()
 			return nil, fmt.Errorf("logind match %s: %w", member, err)
@@ -102,43 +102,74 @@ func (l *Logind) Holding() bool {
 }
 
 func (l *Logind) loop() {
+	// systemd >= 255 emits PrepareForShutdownWithMetadata (carrying "type":
+	// reboot, power-off, ...) right after the plain PrepareForShutdown. Hold a
+	// plain shutdown briefly so the metadata variant can supersede it.
+	var pendingShutdown *time.Timer
+	var mu sync.Mutex
+	emitShutdown := func(kind string) {
+		mu.Lock()
+		if pendingShutdown != nil {
+			pendingShutdown.Stop()
+			pendingShutdown = nil
+		}
+		mu.Unlock()
+		l.emit(Event{Kind: Shutdown, At: time.Now().Round(0), Source: "logind", Confidence: "confirmed", ShutdownType: kind})
+	}
 	for s := range l.sig {
-		if s.Path != logindPath || len(s.Body) != 1 {
+		if s.Path != logindPath || len(s.Body) < 1 {
 			continue
 		}
 		starting, ok := s.Body[0].(bool)
 		if !ok {
 			continue
 		}
-		var kind Kind
 		switch s.Name {
 		case logindIface + ".PrepareForSleep":
-			kind = Sleep
-			if !starting {
-				kind = Resume
+			if starting {
+				l.emit(Event{Kind: Sleep, At: time.Now().Round(0), Source: "logind", Confidence: "confirmed"})
+			} else {
+				_ = l.takeInhibitor() // re-arm for the next sleep
+				l.emit(Event{Kind: Resume, At: time.Now().Round(0), Source: "logind", Confidence: "confirmed"})
 			}
 		case logindIface + ".PrepareForShutdown":
 			if !starting { // shutdown cancelled: hold the inhibitor again
 				_ = l.takeInhibitor()
 				continue
 			}
-			kind = Shutdown
-		default:
-			continue
+			mu.Lock()
+			if pendingShutdown == nil {
+				pendingShutdown = time.AfterFunc(150*time.Millisecond, func() { emitShutdown("") })
+			}
+			mu.Unlock()
+		case logindIface + ".PrepareForShutdownWithMetadata":
+			if !starting {
+				continue
+			}
+			kind := ""
+			if len(s.Body) > 1 {
+				if md, ok := s.Body[1].(map[string]dbus.Variant); ok {
+					if v, ok := md["type"]; ok {
+						kind, _ = v.Value().(string)
+					}
+				}
+			}
+			emitShutdown(kind)
 		}
-		ev := Event{Kind: kind, At: time.Now().Round(0), Source: "logind", Confidence: "confirmed"}
-		if kind == Resume {
-			_ = l.takeInhibitor() // re-arm for the next sleep
-		} else {
-			once := &sync.Once{}
-			ev.once, ev.ready = once, l.releaseInhibitor
-			time.AfterFunc(time.Duration(l.maxDelay.Load()), func() { once.Do(l.releaseInhibitor) })
-		}
-		select {
-		case l.ch <- ev:
-		default:
-			ev.Ready() // nobody listening: never block the system
-		}
+	}
+}
+
+// emit delivers an event; Sleep/Shutdown get a bounded inhibitor release.
+func (l *Logind) emit(ev Event) {
+	if ev.Kind != Resume {
+		once := &sync.Once{}
+		ev.once, ev.ready = once, l.releaseInhibitor
+		time.AfterFunc(time.Duration(l.maxDelay.Load()), func() { once.Do(l.releaseInhibitor) })
+	}
+	select {
+	case l.ch <- ev:
+	default:
+		ev.Ready() // nobody listening: never block the system
 	}
 }
 

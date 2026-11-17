@@ -15,9 +15,13 @@ type cpuSample struct{ busy, total uint64 }
 
 // System collects OS-level telemetry. Not safe for concurrent Collect calls.
 type System struct {
-	env     Env
-	prevCPU *cpuSample
+	env      Env
+	prevCPU  *cpuSample
+	bootTime time.Time // pinned per boot (btime can shift by ~1 s when the clock is adjusted)
 }
+
+// PinBootTime fixes the reported boot time for this boot.
+func (s *System) PinBootTime(t time.Time) { s.bootTime = t }
 
 // NewSystem builds the system collector.
 func NewSystem(env Env) *System { return &System{env: env} }
@@ -43,7 +47,7 @@ func (s *System) Collect(ctx context.Context) []Metric {
 		add(Metric{Key: "memory.used_percent", Value: round1(100 * float64(total-avail) / float64(total)), Unit: "%", Source: "/proc/meminfo", Confidence: "confirmed"})
 		add(Metric{Key: "memory.total_bytes", Value: total, Unit: "B", Source: "/proc/meminfo", Confidence: "confirmed"})
 	}
-	if bt, err := s.readBootTime(); err == nil {
+	if bt, err := s.BootTime(); err == nil {
 		add(Metric{Key: "system.boot_time", Value: bt.UTC().Format(time.RFC3339), Source: "/proc/stat btime", Confidence: "confirmed"})
 	}
 	out = append(out, s.storage(now)...)
@@ -55,7 +59,12 @@ func (s *System) Collect(ctx context.Context) []Metric {
 }
 
 // BootTime returns the kernel boot time (/proc/stat btime).
-func (s *System) BootTime() (time.Time, error) { return s.readBootTime() }
+func (s *System) BootTime() (time.Time, error) {
+	if !s.bootTime.IsZero() {
+		return s.bootTime, nil
+	}
+	return s.readBootTime()
+}
 
 func (s *System) readCPU() (cpuSample, error) {
 	st, err := s.env.read("/proc/stat")
