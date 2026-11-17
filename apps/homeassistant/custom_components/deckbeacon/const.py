@@ -34,3 +34,10 @@ SIGNAL_NEW_METRIC: Final = "deckbeacon_new_metric_{}"
 # (NetworkManager may drop Wi-Fi before the agent can close the session, as
 # observed on the Dell G15): stop waiting for heartbeats after this grace period.
 EXPECTED_DROP_GRACE: Final = 5.0
+
+# Options: permission tiers granted to the device per transport (agent enforces too).
+CONF_GM_LOCAL: Final = "game_management_local"
+CONF_GM_REMOTE: Final = "game_management_remote"
+
+COMMAND_ACK_TIMEOUT: Final = 15.0
+TERMINAL_STATES: Final = frozenset({"dispatched", "confirmed", "rejected", "failed", "expired", "duplicate", "deferred"})

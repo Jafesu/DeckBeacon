@@ -18,9 +18,11 @@ from homeassistant.const import (
     PERCENTAGE,
     REVOLUTIONS_PER_MINUTE,
     EntityCategory,
+    UnitOfDataRate,
     UnitOfInformation,
     UnitOfPower,
     UnitOfTemperature,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -42,6 +44,7 @@ def _ts(v: Any) -> datetime | None:
 
 
 _M = SensorStateClass.MEASUREMENT
+_DOWNLOAD_STATES = ("idle", "downloading", "paused", "installing", "updating", "verifying", "update_required", "uninstalling", "files_missing", "installed")
 METRICS: dict[str, MetricDescription] = {
     d.key: d
     for d in (
@@ -131,6 +134,43 @@ METRICS: dict[str, MetricDescription] = {
         ),
         MetricDescription(key="fan.rpm", translation_key="fan", native_unit_of_measurement=REVOLUTIONS_PER_MINUTE, state_class=_M),
         MetricDescription(key="gpu.busy", translation_key="gpu_busy", native_unit_of_measurement=PERCENTAGE, state_class=_M),
+        MetricDescription(key="game.current.app_id", translation_key="current_app_id", entity_category=EntityCategory.DIAGNOSTIC),
+        MetricDescription(key="game.session.started_at", translation_key="session_started", device_class=SensorDeviceClass.TIMESTAMP, convert=_ts),
+        MetricDescription(
+            key="game.session.duration_s",
+            translation_key="session_duration",
+            device_class=SensorDeviceClass.DURATION,
+            native_unit_of_measurement=UnitOfTime.SECONDS,
+            suggested_unit_of_measurement=UnitOfTime.MINUTES,
+            suggested_display_precision=0,
+        ),
+        MetricDescription(key="library.games", translation_key="installed_games", state_class=_M),
+        MetricDescription(key="library.updates", translation_key="updates_available", state_class=_M),
+        MetricDescription(
+            key="downloads.status",
+            translation_key="download_status",
+            device_class=SensorDeviceClass.ENUM,
+            options=list(_DOWNLOAD_STATES) + ["unknown"],
+            convert=lambda v: v if v in _DOWNLOAD_STATES else "unknown",
+        ),
+        MetricDescription(key="downloads.name", translation_key="download_name"),
+        MetricDescription(key="downloads.progress", translation_key="download_progress", native_unit_of_measurement=PERCENTAGE, suggested_display_precision=1),
+        MetricDescription(
+            key="downloads.rate_bps",
+            translation_key="download_rate",
+            device_class=SensorDeviceClass.DATA_RATE,
+            native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
+            suggested_unit_of_measurement=UnitOfDataRate.MEGABYTES_PER_SECOND,
+            suggested_display_precision=1,
+        ),
+        MetricDescription(
+            key="downloads.eta_s",
+            translation_key="download_eta",
+            device_class=SensorDeviceClass.DURATION,
+            native_unit_of_measurement=UnitOfTime.SECONDS,
+            suggested_unit_of_measurement=UnitOfTime.MINUTES,
+            suggested_display_precision=0,
+        ),
         MetricDescription(
             key="session.mode",
             translation_key="session_mode",
@@ -148,13 +188,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: DeckBeaconConfigEntry, a
 
     @callback
     def add(keys: list[str]) -> None:
-        new = [MetricSensor(runtime, METRICS[k]) for k in keys if k in METRICS and k not in added]
+        new = [MetricSensor(runtime, METRICS[k]) for k in keys if k in METRICS and k not in added and k != "game.current.name"]
         added.update(e.entity_description.key for e in new)
         if new:
             async_add_entities(new)
 
-    async_add_entities([ConnectionSensor(runtime), PowerStateSensor(runtime), LastSeenSensor(runtime)])
-    add(entry.data.get(CONF_METRIC_KEYS, []))
+    async_add_entities([ConnectionSensor(runtime), PowerStateSensor(runtime), LastSeenSensor(runtime), CurrentGameSensor(runtime)])
+    add([k for k in entry.data.get(CONF_METRIC_KEYS, []) if k != "game.current.name"])
     entry.async_on_unload(async_dispatcher_connect(hass, SIGNAL_NEW_METRIC.format(entry.entry_id), add))
 
 
@@ -215,6 +255,39 @@ class PowerStateSensor(DeckBeaconEntity, SensorEntity):
     @property
     def native_value(self) -> str:
         return self.runtime.power_state
+
+
+class CurrentGameSensor(DeckBeaconEntity, SensorEntity):
+    """The game being played. "Not playing" is a known state, not "unavailable"."""
+
+    _attr_translation_key = "current_game"
+    _attr_icon = "mdi:gamepad-variant"
+
+    def __init__(self, runtime) -> None:
+        super().__init__(runtime, "game_current_name")
+
+    def _metric(self) -> dict[str, Any] | None:
+        return self.runtime.metrics.get("game.current.name")
+
+    @property
+    def available(self) -> bool:
+        m = self._metric()
+        if not self.runtime.connected or m is None:
+            return False
+        return m.get("value") is not None or m.get("reason") == "no game running"
+
+    @property
+    def native_value(self) -> str | None:
+        m = self._metric()
+        if m is None:
+            return None
+        return m.get("value") if m.get("value") is not None else "Not playing"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        app = self.runtime.metrics.get("game.current.app_id", {}).get("value")
+        started = self.runtime.metrics.get("game.session.started_at", {}).get("value")
+        return {"app_id": app, "session_started": started} if app else None
 
 
 class LastSeenSensor(DeckBeaconEntity, SensorEntity):

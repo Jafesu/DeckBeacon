@@ -110,6 +110,52 @@
           "rebooting": "Rebooting",
           "off": "Off"
         }
+      },
+      "current_game": {
+        "name": "Current game"
+      },
+      "current_app_id": {
+        "name": "Current app ID"
+      },
+      "session_started": {
+        "name": "Session started"
+      },
+      "session_duration": {
+        "name": "Session duration"
+      },
+      "installed_games": {
+        "name": "Installed games"
+      },
+      "updates_available": {
+        "name": "Updates available"
+      },
+      "download_status": {
+        "name": "Download status",
+        "state": {
+          "idle": "Idle",
+          "downloading": "Downloading",
+          "paused": "Paused",
+          "installing": "Installing",
+          "updating": "Updating",
+          "verifying": "Verifying",
+          "update_required": "Update required",
+          "uninstalling": "Uninstalling",
+          "files_missing": "Files missing",
+          "installed": "Installed",
+          "unknown": "Unknown"
+        }
+      },
+      "download_name": {
+        "name": "Downloading"
+      },
+      "download_progress": {
+        "name": "Download progress"
+      },
+      "download_rate": {
+        "name": "Download speed"
+      },
+      "download_eta": {
+        "name": "Download time remaining"
       }
     },
     "binary_sensor": {
@@ -118,6 +164,72 @@
       },
       "ac_power": {
         "name": "AC power"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "DeckBeacon permissions",
+        "description": "What Home Assistant may do on this device. The device enforces the same limits.",
+        "data": {
+          "game_management_local": "Allow game management (launch) on the local network",
+          "game_management_remote": "Allow game management (launch) over remote connections"
+        }
+      }
+    }
+  },
+  "services": {
+    "launch_game": {
+      "name": "Launch game",
+      "description": "Ask Steam on the device to start an installed game.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The SteamOS device."
+        },
+        "app_id": {
+          "name": "App ID",
+          "description": "Steam App ID of an installed game."
+        }
+      }
+    },
+    "list_games": {
+      "name": "List games",
+      "description": "Return the installed library.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The SteamOS device."
+        },
+        "include_tools": {
+          "name": "Include tools",
+          "description": "Also list Proton and runtimes."
+        }
+      }
+    },
+    "get_game": {
+      "name": "Get game",
+      "description": "Return one library entry.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The SteamOS device."
+        },
+        "app_id": {
+          "name": "App ID",
+          "description": "Steam App ID."
+        }
+      }
+    },
+    "refresh_library": {
+      "name": "Refresh library",
+      "description": "Rescan the Steam library now.",
+      "fields": {
+        "device_id": {
+          "name": "Device",
+          "description": "The SteamOS device."
+        }
       }
     }
   }

@@ -31,8 +31,11 @@ from jsonschema import Draft202012Validator
 
 from . import noise
 from .const import (
+    COMMAND_ACK_TIMEOUT,
     CONF_DEVICE_ID,
     CONF_DEVICE_STATIC,
+    CONF_GM_LOCAL,
+    CONF_GM_REMOTE,
     CONF_METRIC_KEYS,
     DOMAIN,
     EVENT_DEVICE,
@@ -49,8 +52,9 @@ from .const import (
     PATH_SESSION,
     SIGNAL_NEW_METRIC,
     SIGNAL_UPDATE,
+    TERMINAL_STATES,
 )
-from .protocol import Channel, InvalidMessage, ProtocolError, load_validator, responder_handshake
+from .protocol import Channel, InvalidMessage, ProtocolError, load_validator, now_iso, responder_handshake, ulid
 
 _LOGGER = logging.getLogger(__name__)
 _HUB_LOCK = "deckbeacon_hub_lock"
@@ -115,6 +119,11 @@ class DeviceRuntime:
         # Physical power state, distinct from connection state (spec 01 invariant).
         self.power_state = "unknown"
         self.expect_drop_at: float | None = None  # monotonic deadline after an announced sleep/shutdown
+        self.library: dict[int, dict[str, Any]] = {}
+        self.library_revision = 0
+        self._pages: dict[int, dict[int, list[dict[str, Any]]]] = {}
+        self._pending: dict[str, asyncio.Future] = {}
+        self.options_snapshot: dict[str, Any] = {}
         self._store: Store = Store(hass, 1, f"{DOMAIN}.events.{entry.entry_id}")
         self._supersedes: list[float] = []
 
@@ -198,6 +207,47 @@ class DeviceRuntime:
             self.hass.config_entries.async_update_entry(self.entry, data={**self.entry.data, CONF_METRIC_KEYS: keys})
             async_dispatcher_send(self.hass, SIGNAL_NEW_METRIC.format(self.entry.entry_id), new)
         self.notify()
+
+    def granted(self, transport: str) -> list[str]:
+        """Permission tiers for this transport (spec 10: separate local/remote policy)."""
+        opts = self.entry.options
+        tiers = ["monitoring"]
+        if opts.get(CONF_GM_REMOTE if transport == "remote" else CONF_GM_LOCAL, transport != "remote"):
+            tiers.append("game_management")
+        return tiers
+
+    def apply_library(self, body: dict[str, Any]) -> None:
+        """Assemble paged snapshots; switch atomically when a revision is complete."""
+        rev, page, pages = body["revision"], body["page"], body["pages"]
+        if rev < self.library_revision:
+            return
+        got = self._pages.setdefault(rev, {})
+        got[page] = body["games"]
+        if len(got) == pages:
+            self.library = {g["app_id"]: g for p in sorted(got) for g in got[p]}
+            self.library_revision = rev
+            self._pages = {r: v for r, v in self._pages.items() if r > rev}
+            self.notify()
+
+    def resolve_command(self, body: dict[str, Any]) -> None:
+        fut = self._pending.get(body["command_id"])
+        if fut is not None and not fut.done() and body["state"] in TERMINAL_STATES:
+            fut.set_result(body)
+
+    async def async_send_command(self, name: str, args: dict[str, Any], ttl_s: int = 60) -> dict[str, Any]:
+        """Send a command and wait for its first decisive state (dispatched/confirmed/rejected/...)."""
+        ch = self.channel
+        if ch is None:
+            raise ConnectionError("device is not connected")
+        command_id = ulid()
+        fut: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._pending[command_id] = fut
+        try:
+            await ch.send("command", {"command_id": command_id, "name": name, "args": args, "ttl_s": ttl_s, "issued_at": now_iso()})
+            async with asyncio.timeout(COMMAND_ACK_TIMEOUT):
+                return await fut
+        finally:
+            self._pending.pop(command_id, None)
 
     def accept_event(self, event: dict[str, Any]) -> bool:
         """Fire the HA event unless already delivered. Returns True if fired."""
@@ -498,7 +548,7 @@ class SessionView(_DeviceView):
                     "integration_version": INTEGRATION_VERSION,
                     "heartbeat_s": HEARTBEAT_SECONDS,
                     "last_received_event_seq": runtime.last_event_seq,
-                    "policy": {"transport": hello["session"]["transport"], "granted": ["monitoring"]},
+                    "policy": {"transport": hello["session"]["transport"], "granted": runtime.granted(hello["session"]["transport"])},
                 },
             )
             while True:
@@ -539,7 +589,10 @@ class SessionView(_DeviceView):
             case "ping":
                 await ch.send("pong", {"ref_id": msg["id"]})
             case "command_result":
+                runtime.resolve_command(body)
                 runtime.hass.bus.async_fire(f"{DOMAIN}_command_result", {"device_id": runtime.device_id, **body})
+            case "library":
+                runtime.apply_library(body)
             case "pong" | "ack" | "error":
                 pass
             case _:

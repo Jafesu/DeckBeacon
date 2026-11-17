@@ -11,9 +11,22 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+import voluptuous as vol
+from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.core import callback
 
-from .const import CONF_DEVICE_ID, CONF_DEVICE_STATIC, CONF_METRIC_KEYS, CONF_MODEL, CONF_NAME, CONF_VENDOR, DOMAIN, PAIRING_WINDOW_SECONDS
+from .const import (
+    CONF_DEVICE_ID,
+    CONF_DEVICE_STATIC,
+    CONF_GM_LOCAL,
+    CONF_GM_REMOTE,
+    CONF_METRIC_KEYS,
+    CONF_MODEL,
+    CONF_NAME,
+    CONF_VENDOR,
+    DOMAIN,
+    PAIRING_WINDOW_SECONDS,
+)
 from .hub import PairingAborted, PairingWindow, async_get_hub
 
 
@@ -21,6 +34,11 @@ class DeckBeaconConfigFlow(ConfigFlow, domain=DOMAIN):
     """Pair one SteamOS device."""
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        return DeckBeaconOptionsFlow()
 
     def __init__(self) -> None:
         self._window: PairingWindow | None = None
@@ -148,3 +166,21 @@ class DeckBeaconConfigFlow(ConfigFlow, domain=DOMAIN):
         """Flow closed by the user: close the window."""
         if self._window is not None and not self._window.finished.done():
             self._finish(False, "user_cancelled")
+
+
+class DeckBeaconOptionsFlow(OptionsFlow):
+    """Permission tiers per transport. The agent enforces them too (spec 10)."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        opts = self.config_entry.options
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_GM_LOCAL, default=opts.get(CONF_GM_LOCAL, True)): bool,
+                    vol.Required(CONF_GM_REMOTE, default=opts.get(CONF_GM_REMOTE, False)): bool,
+                }
+            ),
+        )
