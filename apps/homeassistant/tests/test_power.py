@@ -90,3 +90,22 @@ async def test_unknown_event_type_is_acked_and_skipped(hass: HomeAssistant, clie
     assert (await agent.recv())["type"] == "pong"  # session survived
     await settle(hass)
     assert fired == []
+
+
+async def test_announced_suspend_survives_reload(hass: HomeAssistant, client) -> None:
+    """Found on the G15: an entry reload erased a live 'suspended' state."""
+    agent = SimAgent()
+    entry = await pair(hass, client, agent)
+    await agent.connect(client)
+    await agent.event("device_suspending", {"source": "logind", "confidence": "confirmed"})
+    await agent.recv()
+    await agent.close()  # agent closes the session after the ack (M3 follow-up)
+    await settle(hass)
+    assert st(hass, agent.device_id, "power_state") == "suspended"
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await settle(hass)
+    assert st(hass, agent.device_id, "power_state") == "suspended"
+    assert st(hass, agent.device_id, "connection") == "offline"
+    await agent.connect(client)  # wake
+    await settle(hass)
+    assert st(hass, agent.device_id, "power_state") == "on"

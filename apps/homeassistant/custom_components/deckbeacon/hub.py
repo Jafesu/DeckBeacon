@@ -119,10 +119,23 @@ class DeviceRuntime:
     async def async_load(self) -> None:
         data = await self._store.async_load() or {}
         self.last_event_seq = int(data.get("last_event_seq", 0))
+        # Restore an announced state (e.g. "suspended") across reloads and HA
+        # restarts; found on the G15 when a reload erased a live "suspended".
+        restored = data.get("power_state")
+        if restored in ("suspended", "shutting_down"):
+            self.power_state = restored
 
     @property
     def connected(self) -> bool:
         return self.channel is not None
+
+    def _data(self) -> dict[str, Any]:
+        return {"last_event_seq": self.last_event_seq, "power_state": self.power_state}
+
+    def _set_power(self, state: str) -> None:
+        if state != self.power_state:
+            self.power_state = state
+            self._store.async_delay_save(self._data, 1.0)
 
     @callback
     def notify(self) -> None:
@@ -146,7 +159,7 @@ class DeviceRuntime:
             await old.ws.close(code=CLOSE_SUPERSEDED, message=b"superseded by a newer session")
         self.channel = channel
         self.hello = hello
-        self.power_state = "on"  # it is talking to us
+        self._set_power("on")  # it is talking to us
         self.transport = hello["session"]["transport"]
         self.connected_since = self.last_seen = datetime.now(UTC)
         self.notify()
@@ -158,7 +171,7 @@ class DeviceRuntime:
             # Keep an announced suspend/shutdown; an unannounced drop proves nothing
             # about power (Wi-Fi loss, crash, HA restart...), so it becomes unknown.
             if self.power_state not in ("suspended", "shutting_down"):
-                self.power_state = "unknown"
+                self._set_power("unknown")
             self.notify()
 
     def touch(self) -> None:
@@ -185,9 +198,9 @@ class DeviceRuntime:
         if event["live"]:  # backfilled lifecycle events are history, not current state
             new_state = _POWER_EVENTS.get(event["event_type"])
             if new_state is not None and new_state != self.power_state:
-                self.power_state = new_state
+                self._set_power(new_state)
                 self.notify()
-        self._store.async_delay_save(lambda: {"last_event_seq": self.last_event_seq}, 1.0)
+        self._store.async_delay_save(self._data, 1.0)
         self.hass.bus.async_fire(
             EVENT_DEVICE,
             {
@@ -204,7 +217,7 @@ class DeviceRuntime:
         return True
 
     async def async_flush(self) -> None:
-        await self._store.async_save({"last_event_seq": self.last_event_seq})
+        await self._store.async_save(self._data())
 
 
 _POWER_EVENTS = {

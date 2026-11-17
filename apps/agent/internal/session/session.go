@@ -176,6 +176,14 @@ func (c *Client) Run(ctx context.Context) error {
 				attempt, lastErr = 0, nil
 				break
 			}
+			if errors.Is(err, errSuspending) {
+				c.setStatus("suspended", "", "", "")
+				if err := c.awaitResume(ctx, 2*time.Minute); err != nil {
+					return err
+				}
+				attempt, lastErr = 0, nil
+				break
+			}
 			if err != nil {
 				lastErr = err
 				c.cfg.Log.Warn("connection ended", "url_kind", u.Kind, "err", err)
@@ -218,7 +226,30 @@ func (c *Client) Run(ctx context.Context) error {
 var (
 	errPreferLocal = errors.New("local transport available again")
 	errResumed     = errors.New("device resumed from sleep")
+	errSuspending  = errors.New("device is going to sleep or shutting down")
 )
+
+// awaitResume waits for the resume after an announced sleep (no reconnect
+// attempts while the system goes down). If the sleep never happens (cancelled,
+// or a shutdown was aborted), the fallback timer reconnects anyway.
+func (c *Client) awaitResume(ctx context.Context, fallback time.Duration) error {
+	t := time.NewTimer(fallback)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+			return nil
+		case ev := <-c.cfg.Lifecycle:
+			c.recordLifecycle(ev)
+			ev.Ready()
+			if ev.Kind == lifecycle.Resume {
+				return nil
+			}
+		}
+	}
+}
 
 // recordLifecycle queues the protocol event for a transition and returns its seq.
 func (c *Client) recordLifecycle(ev lifecycle.Event) uint64 {
@@ -365,17 +396,29 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 		deadline time.Time
 	}
 	var holding []held
-	releaseAcked := func(force bool) {
+	// releaseAcked releases held sleep/shutdown transitions once HA has acked
+	// their announcement (or the deadline passed). It returns true if one was
+	// released: the device is about to sleep, so the session is closed cleanly
+	// first and HA sees "offline" at once instead of after a heartbeat timeout.
+	releaseAcked := func(force bool) bool {
 		st, _ := c.cfg.Store.Stats()
 		kept := holding[:0]
+		var ready []lifecycle.Event
 		for _, h := range holding {
 			if force || st.Acked >= h.seq || c.cfg.Now().After(h.deadline) {
-				h.ev.Ready()
+				ready = append(ready, h.ev)
 				continue
 			}
 			kept = append(kept, h)
 		}
 		holding = kept
+		if len(ready) > 0 && !force {
+			_ = conn.Close(websocket.StatusGoingAway, "suspending")
+		}
+		for _, ev := range ready {
+			ev.Ready()
+		}
+		return len(ready) > 0
 	}
 	defer releaseAcked(true) // never leave the system inhibited
 
@@ -421,8 +464,8 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			if err := c.handle(ctx, conn, m); err != nil {
 				return err
 			}
-			if m.Type == "ack" {
-				releaseAcked(false)
+			if m.Type == "ack" && releaseAcked(false) {
+				return errSuspending
 			}
 		case <-telemetry.C:
 			if err := sendTelemetry(); err != nil {
@@ -432,7 +475,9 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			if err := flushEvents(); err != nil {
 				return err
 			}
-			releaseAcked(false)
+			if releaseAcked(false) {
+				return errSuspending
+			}
 		case ev := <-c.cfg.Lifecycle:
 			seq := c.recordLifecycle(ev)
 			if ev.Kind == lifecycle.Resume {

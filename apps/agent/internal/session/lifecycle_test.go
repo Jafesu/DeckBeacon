@@ -120,3 +120,26 @@ func TestUnknownCommandFromNewerHAIsRejectedNotFatal(t *testing.T) {
 		t.Fatal("session was dropped for an unknown command (lenient receiver violated)")
 	}
 }
+
+func TestSessionClosedAfterAckedSleepAndReopenedOnResume(t *testing.T) {
+	r := newRig(t)
+	lc := make(chan lifecycle.Event, 1)
+	r.cli.cfg.Lifecycle = lc
+	r.cli.cfg.Backoff = func(int) time.Duration { return time.Hour }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.cli.Run(ctx)
+	waitFor(t, "connected", func() bool { return r.cli.Status().State == "connected_local" })
+	hellos := len(r.srv.Messages("hello"))
+	released := make(chan struct{})
+	lc <- lifecycle.NewEvent(lifecycle.Sleep, "logind", "confirmed", func() { close(released) })
+	<-released
+	waitFor(t, "suspended status", func() bool { return r.cli.Status().State == "suspended" })
+	time.Sleep(300 * time.Millisecond)
+	if len(r.srv.Messages("hello")) != hellos {
+		t.Fatal("agent reconnected while the system was going to sleep")
+	}
+	lc <- lifecycle.NewEvent(lifecycle.Resume, "logind", "confirmed", nil)
+	waitFor(t, "reconnect after resume", func() bool { return len(r.srv.Messages("hello")) > hellos })
+	waitFor(t, "device_resumed delivered", func() bool { return has(eventTypes(r), "device_resumed") })
+}

@@ -26,7 +26,7 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 | Agent start at boot without login | `systemd --user` + linger via `deckbeacon service install --at-boot` (M3) | none (polkit self-linger) | no | source (upstream polkit) | disabled until opted in | HV-S1 |
 | Agent in Gaming & Desktop modes | `systemd --user` | none | no | research | available | HV-S2 |
 | Root boot helper | system unit | root + sudo password | no | research (deferred, ADR-0003) | unsupported (v1) | — |
-| Sleep/shutdown pre-announce | logind delay inhibitor + `PrepareForSleep`/`PrepareForShutdown` (M3; tested against a fake login1 on a private D-Bus) | none (expected) | no | research | available when logind reachable | HV-P3 |
+| Sleep/shutdown pre-announce | logind delay inhibitor + `PrepareForSleep`/`PrepareForShutdown` | none | no | **verified (sleep) on Dell G15**, Desktop and Gaming Mode ([HV-P3](evidence/G15-sleep-test-2026-11-17.md)); shutdown and Steam Deck pending | available when logind reachable | HV-P3 |
 | Resume detection | logind `PrepareForSleep(false)`; fallback wall/monotonic clock divergence (heuristic) | none | no | research | available | HV-P3 |
 | Boot detection | kernel `boot_id` change → `device_booted` | none | no | research | available | HV-S2 |
 | Discover HA on LAN | mDNS browse `_home-assistant._tcp` | none | no | research | available | HV-N1 |

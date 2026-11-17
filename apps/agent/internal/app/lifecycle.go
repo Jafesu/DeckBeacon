@@ -40,31 +40,33 @@ func startLifecycle(ctx context.Context, log *slog.Logger) (<-chan lifecycle.Eve
 	if logind != nil {
 		logindCh = logind.Events()
 	}
-	go func() {
-		var lastLogindResume time.Time
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case ev := <-logindCh:
-				if ev.Kind == lifecycle.Resume {
-					lastLogindResume = time.Now()
-				}
-				out <- ev
-			case ev := <-clock.Events():
-				if logind != nil && time.Since(lastLogindResume) < 2*time.Minute {
-					continue // already reported (confirmed) by logind
-				}
-				out <- ev
-			}
-		}
-	}()
+	go mergeLifecycle(ctx, logindCh, clock.Events(), logind != nil, out)
 	stop := func() {
 		if logind != nil {
 			_ = logind.Close()
 		}
 	}
 	return out, caps, stop
+}
+
+// mergeLifecycle forwards logind events, and clock-jump resumes only when logind
+// is unavailable. Found on the Dell G15 (2026-11-17): with both sources active, a
+// clock resume could arrive before logind's PrepareForSleep(false) and cause a
+// second reconnect, so the heuristic must never run alongside logind.
+func mergeLifecycle(ctx context.Context, logindCh, clockCh <-chan lifecycle.Event, haveLogind bool, out chan<- lifecycle.Event) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-logindCh:
+			out <- ev
+		case ev := <-clockCh:
+			if haveLogind {
+				continue // logind reports suspend/resume authoritatively
+			}
+			out <- ev
+		}
+	}
 }
 
 func lifecycleCapabilities(lc lifecycle.Capabilities, svc service.Manager) []collect.Capability {

@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,5 +52,28 @@ func TestLifecycleCapabilities(t *testing.T) {
 	}
 	if caps["lifecycle.sleep_notify"] != "available" || caps["lifecycle.resume_detect"] != "available" {
 		t.Fatalf("caps %v", caps)
+	}
+}
+
+func TestMergeLifecycleIgnoresClockWhenLogindPresent(t *testing.T) {
+	for _, haveLogind := range []bool{true, false} {
+		ctx, cancel := context.WithCancel(context.Background())
+		logindCh, clockCh, out := make(chan lifecycle.Event, 2), make(chan lifecycle.Event, 2), make(chan lifecycle.Event, 4)
+		go mergeLifecycle(ctx, logindCh, clockCh, haveLogind, out)
+		clockCh <- lifecycle.NewEvent(lifecycle.Resume, "clock", "heuristic", nil) // arrives first, as on the G15
+		logindCh <- lifecycle.NewEvent(lifecycle.Resume, "logind", "confirmed", nil)
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+		var got []string
+		for len(out) > 0 {
+			got = append(got, (<-out).Source)
+		}
+		want := "logind"
+		if !haveLogind {
+			want = "clock,logind" // without logind connected only the clock would fire in practice
+		}
+		if strings.Join(got, ",") != want && !(haveLogind == false && strings.Join(got, ",") == "logind,clock") {
+			t.Fatalf("haveLogind=%v: forwarded %v, want %s", haveLogind, got, want)
+		}
 	}
 }
