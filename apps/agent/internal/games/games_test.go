@@ -208,3 +208,35 @@ func TestUIModeAndSessionMetrics(t *testing.T) {
 		t.Fatalf("session=%v", metric(p, "session.type"))
 	}
 }
+
+func TestChangedSignalsOnGameStartAndStop(t *testing.T) {
+	sr, proc := fixture(t)
+	p := New(Config{SteamRoot: sr, ProcRoot: proc})
+	p.scan(true)
+	p.poll()
+	p.checkChanged()
+	<-p.Changed() // initial state
+	p.poll()
+	p.checkChanged()
+	select {
+	case <-p.Changed():
+		t.Fatal("no change, no signal")
+	default:
+	}
+	startGame(t, proc, "900", "413150")
+	p.poll()
+	p.checkChanged()
+	select {
+	case <-p.Changed():
+	default:
+		t.Fatal("game start must signal")
+	}
+	_ = os.RemoveAll(filepath.Join(proc, "900"))
+	p.poll()
+	p.checkChanged()
+	select {
+	case <-p.Changed():
+	default:
+		t.Fatal("game stop must signal")
+	}
+}

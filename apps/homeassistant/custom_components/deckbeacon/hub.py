@@ -120,6 +120,7 @@ class DeviceRuntime:
         self.power_state = "unknown"
         self.expect_drop_at: float | None = None  # monotonic deadline after an announced sleep/shutdown
         self.library: dict[int, dict[str, Any]] = {}
+        self.game_picker: Any = None  # select.GamePicker, used by the Launch button
         self.library_revision = 0
         self._pages: dict[int, dict[int, list[dict[str, Any]]]] = {}
         self._pending: dict[str, asyncio.Future] = {}

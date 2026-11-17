@@ -2,9 +2,10 @@
 // that reports a game's Rich Presence text (details, state, party, elapsed)
 // while forwarding every frame unchanged to the user's real Discord client.
 //
-// Rules (ADR-0007): local IPC only, never talks to Discord's servers; forward-
-// only (no Discord client running means the game sees no Discord, exactly as
-// without DeckBeacon); payload text is untrusted, sanitized and length-capped;
+// Rules (ADR-0007): local IPC only, never talks to Discord's servers. With a
+// Discord client running every frame is forwarded unchanged; without one the
+// proxy answers the game itself (standalone, owner decision 2026-11-17) so the
+// presence still reaches HA. Payload text is untrusted, sanitized and capped;
 // images, URLs, buttons and secrets in the payload are ignored; nothing is
 // persisted beyond the current connection.
 package activity
@@ -33,6 +34,8 @@ const (
 	opHandshake = 0
 	opFrame     = 1
 	opClose     = 2
+	opPing      = 3
+	opPong      = 4
 )
 
 const (
@@ -250,9 +253,10 @@ func (p *Proxy) serve(client net.Conn) {
 	defer client.Close()
 	up, err := p.dialUpstream()
 	if err != nil {
-		return // forward-only: behave exactly as if no Discord were running
+		up = nil // no Discord client: answer locally (standalone, see local.go)
+	} else {
+		defer up.Close()
 	}
-	defer up.Close()
 	p.mu.Lock()
 	if p.ln == nil { // closing
 		p.mu.Unlock()
@@ -261,15 +265,24 @@ func (p *Proxy) serve(client net.Conn) {
 	p.nextID++
 	id := p.nextID
 	p.conns[id] = &Activity{}
-	p.open[client], p.open[up] = struct{}{}, struct{}{}
+	p.open[client] = struct{}{}
+	if up != nil {
+		p.open[up] = struct{}{}
+	}
 	p.mu.Unlock()
 	defer func() {
 		p.mu.Lock()
 		delete(p.conns, id)
 		delete(p.open, client)
-		delete(p.open, up)
+		if up != nil {
+			delete(p.open, up)
+		}
 		p.mu.Unlock()
 	}()
+	if up == nil {
+		p.serveLocal(id, client)
+		return
+	}
 	done := make(chan struct{}, 2)
 	go func() { // Discord -> game: unchanged
 		_, _ = io.Copy(client, up)

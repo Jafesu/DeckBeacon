@@ -36,29 +36,32 @@ def _public(game: dict[str, Any]) -> dict[str, Any]:
     return {k: game[k] for k in ("app_id", "name", "kind", "status", "size_on_disk", "last_played", "build_id") if k in game}
 
 
+async def async_launch(rt, app_id: int) -> dict[str, Any]:
+    """Launch an installed game or shortcut (shared by the action and the Launch button)."""
+    if not rt.connected:
+        raise HomeAssistantError(f"{rt.entry.title} is offline")
+    if "game_management" not in rt.granted(rt.transport or "local"):
+        raise ServiceValidationError(f"Game management is not allowed over the {rt.transport} connection (DeckBeacon options)")
+    game = rt.library.get(app_id)
+    if game is None or game.get("kind") == "tool":
+        raise ServiceValidationError(f"App {app_id} is not an installed game on {rt.entry.title}")
+    try:
+        result = await rt.async_send_command("launch_game", {"app_id": app_id}, ttl_s=60)
+    except TimeoutError as err:
+        raise HomeAssistantError("The device did not answer in time") from err
+    except ConnectionError as err:
+        raise HomeAssistantError(str(err)) from err
+    if result["state"] in ("rejected", "failed", "expired"):
+        raise HomeAssistantError(result.get("error", {}).get("message", result["state"]))
+    # "dispatched": Steam accepted the request; a deckbeacon_command_result event
+    # with state "confirmed" follows once the game process is running.
+    return {"state": result["state"], "app_id": app_id, "name": game["name"]}
+
+
 @callback
 def async_register_services(hass: HomeAssistant) -> None:
     async def launch_game(call: ServiceCall) -> ServiceResponse:
-        rt = _runtime(hass, call.data[ATTR_DEVICE_ID])
-        app_id = call.data[ATTR_APP_ID]
-        if not rt.connected:
-            raise HomeAssistantError(f"{rt.entry.title} is offline")
-        if "game_management" not in rt.granted(rt.transport or "local"):
-            raise ServiceValidationError(f"Game management is not allowed over the {rt.transport} connection (DeckBeacon options)")
-        game = rt.library.get(app_id)
-        if game is None:
-            raise ServiceValidationError(f"App {app_id} is not installed on {rt.entry.title}")
-        try:
-            result = await rt.async_send_command("launch_game", {"app_id": app_id}, ttl_s=60)
-        except TimeoutError as err:
-            raise HomeAssistantError("The device did not answer in time") from err
-        except ConnectionError as err:
-            raise HomeAssistantError(str(err)) from err
-        if result["state"] in ("rejected", "failed", "expired"):
-            raise HomeAssistantError(result.get("error", {}).get("message", result["state"]))
-        # "dispatched": Steam accepted the request; a deckbeacon_command_result event
-        # with state "confirmed" follows once the game process is running.
-        return {"state": result["state"], "app_id": app_id, "name": game["name"]}
+        return await async_launch(_runtime(hass, call.data[ATTR_DEVICE_ID]), call.data[ATTR_APP_ID])
 
     async def list_games(call: ServiceCall) -> ServiceResponse:
         rt = _runtime(hass, call.data[ATTR_DEVICE_ID])

@@ -3,14 +3,13 @@ package activity
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
+	"encoding/json"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -175,7 +174,7 @@ func TestProxyForwardsUnchangedAndReportsActivity(t *testing.T) {
 	}
 }
 
-func TestProxyWithoutDiscordClosesConnection(t *testing.T) {
+func TestProxyStandaloneWithoutDiscord(t *testing.T) {
 	rt := shortDir(t)
 	p := New(Config{RuntimeDir: rt})
 	if err := p.Start(); err != nil {
@@ -187,10 +186,59 @@ func TestProxyWithoutDiscordClosesConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer game.Close()
-	_, _ = game.Write(frame(opHandshake, `{"v":1,"client_id":"1"}`))
-	_ = game.SetReadDeadline(time.Now().Add(2 * time.Second))
-	if _, err := game.Read(make([]byte, 1)); err != io.EOF && !errors.Is(err, syscall.ECONNRESET) {
-		t.Fatalf("forward-only: no Discord means the game sees a closed socket, got %v", err)
+	_ = game.SetDeadline(time.Now().Add(3 * time.Second))
+	_, _ = game.Write(frame(opHandshake, `{"v":1,"client_id":"123"}`))
+	op, body := readFrame(t, game)
+	var ready struct {
+		Cmd, Evt string
+		Data     struct {
+			V    int
+			User struct{ Username string }
+		}
+	}
+	if op != opFrame || json.Unmarshal([]byte(body), &ready) != nil || ready.Evt != "READY" || ready.Data.V != 1 || ready.Data.User.Username != "DeckBeacon" {
+		t.Fatalf("READY %d %s", op, body)
+	}
+	_, _ = game.Write(frame(opFrame, setActivity))
+	_, body = readFrame(t, game)
+	var reply struct {
+		Cmd   string
+		Nonce string
+		Evt   *string
+		Data  map[string]any
+	}
+	if json.Unmarshal([]byte(body), &reply) != nil || reply.Cmd != "SET_ACTIVITY" || reply.Nonce != "1" || reply.Evt != nil || reply.Data["state"] != "Act 1" {
+		t.Fatalf("SET_ACTIVITY reply %s", body)
+	}
+	if a := p.Current(); a == nil || a.Details != "Night City — Watson" {
+		t.Fatalf("activity %+v", a)
+	}
+	_, _ = game.Write(frame(opPing, `{"x":1}`))
+	if op, body := readFrame(t, game); op != opPong || body != `{"x":1}` {
+		t.Fatalf("pong %d %s", op, body)
+	}
+	_, _ = game.Write(frame(opFrame, `{"cmd":"GET_GUILDS","nonce":"9","args":{}}`))
+	if _, body := readFrame(t, game); !strings.Contains(body, `"evt":"ERROR"`) || !strings.Contains(body, `"nonce":"9"`) {
+		t.Fatalf("unsupported command reply %s", body)
+	}
+	_, _ = game.Write(frame(opClose, `{}`))
+	waitFor(t, "close clears", func() bool { return p.Current() == nil })
+}
+
+func TestProxyStandaloneRejectsBadHandshake(t *testing.T) {
+	rt := shortDir(t)
+	p := New(Config{RuntimeDir: rt})
+	_ = p.Start()
+	defer p.Close()
+	game, _ := net.Dial("unix", filepath.Join(rt, "discord-ipc-0"))
+	defer game.Close()
+	_ = game.SetDeadline(time.Now().Add(3 * time.Second))
+	_, _ = game.Write(frame(opFrame, setActivity)) // no handshake first
+	if op, body := readFrame(t, game); op != opClose || !strings.Contains(body, "Invalid handshake") {
+		t.Fatalf("got %d %s", op, body)
+	}
+	if p.Current() != nil {
+		t.Fatal("no activity without a handshake")
 	}
 }
 

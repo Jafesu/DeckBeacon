@@ -198,6 +198,16 @@
       "ac_power": {
         "name": "AC power"
       }
+    },
+    "select": {
+      "game_to_launch": {
+        "name": "Game to launch"
+      }
+    },
+    "button": {
+      "launch_game": {
+        "name": "Launch game"
+      }
     }
   },
   "options": {

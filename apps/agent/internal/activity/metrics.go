@@ -61,7 +61,7 @@ func nonEmpty(s string) any {
 // Capabilities reports the proxy state (ADR-0007 P1, experimental).
 func (p *Proxy) Capabilities() []collect.Capability {
 	st := p.Status()
-	c := collect.Capability{ID: "game.activity", Tier: "ipc", Experimental: true, Source: "Discord IPC proxy (forward-only)", Privilege: "none", Reason: st.Reason}
+	c := collect.Capability{ID: "game.activity", Tier: "ipc", Experimental: true, Source: "Discord IPC proxy (forwards to Discord, or answers locally when Discord is not running)", Privilege: "none", Reason: st.Reason}
 	if st.Listening != "" {
 		c.Status = "available"
 	} else {

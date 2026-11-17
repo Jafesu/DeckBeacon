@@ -500,6 +500,20 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 		}
 		return nil
 	}
+	// Game metrics are pushed as soon as they change (the full telemetry tick
+	// is 30 s; owner on the G15: 10–15 s lag was too slow). HA merges by key.
+	var gameChanged <-chan struct{}
+	if ch, ok := c.cfg.Games.(interface{ Changed() <-chan struct{} }); ok {
+		gameChanged = ch.Changed()
+	}
+	sendGameMetrics := func() error {
+		if ms := c.cfg.Games.Metrics(); len(ms) > 0 {
+			if _, err := conn.Send(ctx, "telemetry", map[string]any{"metrics": ms[:min(len(ms), 200)]}); err != nil {
+				return err
+			}
+		}
+		return sendLibrary()
+	}
 	if err := sendTelemetry(); err != nil {
 		return err
 	}
@@ -523,6 +537,10 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 			}
 		case <-telemetry.C:
 			if err := sendTelemetry(); err != nil {
+				return err
+			}
+		case <-gameChanged:
+			if err := sendGameMetrics(); err != nil {
 				return err
 			}
 		case r := <-c.cfg.Dispatcher.Late():

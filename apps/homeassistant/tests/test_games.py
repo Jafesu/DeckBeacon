@@ -201,3 +201,50 @@ async def test_activity_sensors(hass: HomeAssistant, client) -> None:
     await agent.telemetry([{"key": "game.activity.details", **none}, {"key": "game.activity.state", **none}])
     await settle(hass)
     assert st(hass, agent.device_id, "game_activity_details") == "unavailable"  # AC6: never guessed
+
+
+async def test_game_picker_and_launch_button(hass: HomeAssistant, client) -> None:
+    agent, entry, device_id, _ = await setup(hass, client)
+    await settle(hass)
+    reg = er.async_get(hass)
+    sel = reg.async_get_entity_id("select", DOMAIN, f"{agent.device_id}_game_to_launch")
+    btn = reg.async_get_entity_id("button", DOMAIN, f"{agent.device_id}_launch_game")
+    state = hass.states.get(sel)
+    assert state.attributes["options"] == ["Castle Crashers", "Hollow Acre", "Stardew Valley"]  # tools excluded
+
+    with pytest.raises(ServiceValidationError, match="Choose a game"):
+        await hass.services.async_call("button", "press", {"entity_id": btn}, blocking=True)
+
+    await hass.services.async_call("select", "select_option", {"entity_id": sel, "option": "Hollow Acre"}, blocking=True)
+    assert hass.states.get(sel).state == "Hollow Acre" and hass.states.get(sel).attributes["app_id"] == 4244106195
+
+    async def device_side():
+        cmd = await agent.recv(timeout=5)
+        assert cmd["body"]["name"] == "launch_game" and cmd["body"]["args"] == {"app_id": 4244106195}
+        await agent.send("command_result", {"command_id": cmd["body"]["command_id"], "state": "dispatched"})
+
+    task = asyncio.create_task(device_side())
+    await hass.services.async_call("button", "press", {"entity_id": btn}, blocking=True)
+    await task
+
+
+async def test_launch_button_unavailable_when_remote_denied(hass: HomeAssistant, client) -> None:
+    agent, entry, device_id, _ = await setup(hass, client, transport="remote")
+    await settle(hass)
+    btn = er.async_get(hass).async_get_entity_id("button", DOMAIN, f"{agent.device_id}_launch_game")
+    assert hass.states.get(btn).state == "unavailable"
+
+
+def test_duplicate_names_are_disambiguated() -> None:
+    from types import SimpleNamespace
+
+    from custom_components.deckbeacon.select import launchable
+
+    rt = SimpleNamespace(
+        library={
+            1: {"app_id": 2961728726, "name": "Discord", "kind": "shortcut", "status": "installed"},
+            2: {"app_id": 3248090148, "name": "Discord", "kind": "shortcut", "status": "installed"},
+            3: {"app_id": 1716740, "name": "Starfield", "kind": "game", "status": "downloading"},
+        }
+    )
+    assert launchable(rt) == {"Discord (2961728726)": 2961728726, "Discord (3248090148)": 3248090148}

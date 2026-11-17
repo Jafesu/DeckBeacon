@@ -58,7 +58,8 @@ func Activity(e Env, action string) error {
 		fmt.Fprintf(e.Stdout, "Discord activity proxy: %s (experimental).\n", action)
 		if c.DiscordProxy {
 			fmt.Fprintln(e.Stdout, "Games with Discord Rich Presence will show their details/state in Home Assistant.")
-			fmt.Fprintln(e.Stdout, "Every message is still forwarded unchanged to your Discord client.")
+			fmt.Fprintln(e.Stdout, "If Discord is running, every message is forwarded to it unchanged; if not,")
+			fmt.Fprintln(e.Stdout, "DeckBeacon answers the game itself so the activity still reaches Home Assistant.")
 		}
 		fmt.Fprintln(e.Stdout, "Restart the agent to apply: systemctl --user restart deckbeacon.service")
 	case "status":

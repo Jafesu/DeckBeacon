@@ -178,3 +178,29 @@ func TestBackoffBounds(t *testing.T) {
 		}
 	}
 }
+
+type fakeGames struct{ ch chan struct{} }
+
+func (f fakeGames) Metrics() []collect.Metric {
+	return []collect.Metric{{Key: "game.current.app_id", Value: 413150, SampledAt: time.Now().UTC().Truncate(time.Second), Source: "test"}}
+}
+func (fakeGames) LibraryPages() (uint64, []map[string]any) { return 0, nil }
+func (fakeGames) Revision() uint64                         { return 0 }
+func (f fakeGames) Changed() <-chan struct{}               { return f.ch }
+
+func TestGameChangePushesTelemetryImmediately(t *testing.T) {
+	r := newRig(t)
+	g := fakeGames{ch: make(chan struct{}, 1)}
+	r.cli.cfg.Games = g
+	r.cli.cfg.TelemetryInterval = time.Hour // only the change may cause the second message
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = r.cli.Run(ctx) }()
+	waitFor(t, "initial telemetry", func() bool { return len(r.srv.Messages("telemetry")) == 1 })
+	g.ch <- struct{}{}
+	start := time.Now()
+	waitFor(t, "pushed telemetry", func() bool { return len(r.srv.Messages("telemetry")) == 2 })
+	if time.Since(start) > time.Second {
+		t.Fatalf("push took %v", time.Since(start))
+	}
+}

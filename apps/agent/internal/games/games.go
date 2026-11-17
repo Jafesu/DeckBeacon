@@ -10,6 +10,7 @@ import (
 	"math"
 	"os/exec"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,7 +34,7 @@ type Launcher func(gameID string) error
 type Config struct {
 	SteamRoot  string
 	ProcRoot   string
-	Interval   time.Duration // process poll (default 5 s)
+	Interval   time.Duration // process poll (default 2 s)
 	ScanEvery  time.Duration // library rescan (default 20 s)
 	LaunchWait time.Duration // how long a launch may take to show a process (default 90 s)
 	Launch     Launcher
@@ -62,12 +63,14 @@ type Provider struct {
 	scanErr  error
 	uiMode   *steam.UIModeWatcher
 	session  string
+	changed  chan struct{}
+	lastFP   string
 }
 
 // New creates a provider. An empty SteamRoot means Steam is not installed.
 func New(cfg Config) *Provider {
 	if cfg.Interval <= 0 {
-		cfg.Interval = 5 * time.Second
+		cfg.Interval = 2 * time.Second
 	}
 	if cfg.ScanEvery <= 0 {
 		cfg.ScanEvery = 20 * time.Second
@@ -84,7 +87,7 @@ func New(cfg Config) *Provider {
 	if cfg.Launch == nil {
 		cfg.Launch = SteamURLLauncher
 	}
-	p := &Provider{cfg: cfg, tracker: steam.NewTracker(), events: make(chan Event, 64), prevStat: map[uint32]string{}, session: "unknown"}
+	p := &Provider{cfg: cfg, tracker: steam.NewTracker(), events: make(chan Event, 64), prevStat: map[uint32]string{}, session: "unknown", changed: make(chan struct{}, 1)}
 	if cfg.SteamRoot != "" {
 		p.uiMode = steam.NewUIModeWatcher(cfg.SteamRoot)
 	}
@@ -103,6 +106,48 @@ func SteamURLLauncher(gameID string) error {
 	}
 	go func() { _ = cmd.Wait() }() // Steam may forward and exit, or stay running
 	return nil
+}
+
+// Changed signals (coalesced) that game metrics changed and should be sent now
+// rather than at the next telemetry tick: game start/stop, UI mode, session
+// type, download state, activity text.
+func (p *Provider) Changed() <-chan struct{} { return p.changed }
+
+// checkChanged compares a fingerprint of the user-visible game state.
+func (p *Provider) checkChanged() {
+	p.mu.Lock()
+	var b strings.Builder
+	if s := p.tracker.Current(); s != nil {
+		fmt.Fprintf(&b, "g%d|", s.AppID)
+	}
+	b.WriteString(p.session + "|")
+	if p.uiMode != nil {
+		b.WriteString(p.uiMode.Mode() + "|")
+	}
+	if p.lib != nil {
+		for _, g := range p.lib.Games {
+			if inProgress(g.Status) || g.Status == "update_required" {
+				fmt.Fprintf(&b, "d%d:%s:%d|", g.AppID, g.Status, g.BytesDownloaded)
+			}
+		}
+	}
+	p.mu.Unlock()
+	if p.cfg.Activity != nil {
+		for _, m := range p.cfg.Activity.Metrics() {
+			fmt.Fprintf(&b, "%v|", m.Value)
+		}
+	}
+	fp := b.String()
+	p.mu.Lock()
+	diff := fp != p.lastFP
+	p.lastFP = fp
+	p.mu.Unlock()
+	if diff {
+		select {
+		case p.changed <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // Events delivers game events for the durable queue.
@@ -133,6 +178,7 @@ func (p *Provider) Run(ctx context.Context) {
 				lastScan = p.cfg.Now()
 			}
 			p.poll()
+			p.checkChanged()
 		}
 	}
 }
