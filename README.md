@@ -4,7 +4,7 @@
 
 SteamOS-only, local-first monitoring and management companion for Home Assistant.
 
-**Status:** M0–M3 and M6 complete and validated on real SteamOS hardware (Dell G15). The Go agent pairs with Home Assistant over a SAS-confirmed Noise channel and reports system telemetry, power state, the Steam library (games and non-Steam shortcuts), current game and sessions, live downloads, Steam UI mode and optional Discord Rich Presence activity. Games can be launched from HA. **M8 (dashboard cards and game artwork) in progress.** Pre-release: no packaged install yet.
+**Status:** M0–M3 and M6 complete and validated on real SteamOS hardware (Dell G15). The Go agent pairs with Home Assistant over a SAS-confirmed Noise channel and reports system telemetry, power state, the Steam library (games and non-Steam shortcuts), current game and sessions, live downloads, Steam UI mode and optional Discord Rich Presence activity. Games can be launched and closed from HA. Optional dashboard cards with Steam artwork (M8). The integration and cards install through the HA Marketplace from generated mirror repositories. Pre-release.
 
 - Specification: [`docs/specification/`](docs/specification/) (v1.0, authoritative), [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md)
 - Feasibility report: [`docs/research/M0-feasibility-report.md`](docs/research/M0-feasibility-report.md)

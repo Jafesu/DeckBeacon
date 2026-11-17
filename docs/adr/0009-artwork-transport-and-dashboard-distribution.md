@@ -1,6 +1,6 @@
 # ADR-0009: Game artwork transport and dashboard card distribution
 
-Status: Proposed (M8, 2026-11-17)
+Status: Accepted (M8, 2026-11-17; validated on hardware, cards distributed via the Marketplace mirror)
 
 ## Context
 Spec 08 asks for game artwork in the dashboard through an **authenticated proxy, with no exposed agent file URLs**. The agent never listens on a port (ADR-0001: it dials HA), so HA can't fetch images from the device. Artwork must travel over the existing Noise session, whose messages carry at most 65,519 bytes of plaintext. Steam's artwork cache (`appcache/librarycache/<appid>/`) has two layouts (G15 §6). Images can be large: heroes are 1920 px wide.
