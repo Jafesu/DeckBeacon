@@ -68,3 +68,14 @@ Status: M1 baseline (2026-11-16). Re-reviewed at every milestone that adds an in
 - [x] Closed command set with typed args (M1 schemas plus fixtures).
 - [x] Notification actions cannot carry service calls (M1 schema plus fixture).
 - [x] Secret scanning in CI (M1).
+
+## Update (M9, 2026-11-17): managed agent updates (ADR-0010)
+| Threat | Mitigation |
+|---|---|
+| Compromised release artifact or release page | Ed25519 signature over `release.json`, keys embedded in the agent (rotation list), asset sha256 and size bound in the signed manifest. The tag must match the manifest version. Verified before anything is staged. |
+| Downgrade or rollback attack | Only versions newer than the running one are offered. Rollback happens only to the locally kept previous version, by the updater or the user. |
+| Unattended or forged installation | Requires `approve_agent_update {version}` for the exact version with `confirmed_by_user`, under the separate `updates` tier, enforced on the agent. Approvals expire after 7 days. |
+| Broken release bricks the device | Independent updater (transient user unit), health check (new version and pid, reconnect if it was connected), automatic rollback, manual `deckbeacon update rollback`. Identity and trust are never touched. |
+| Malicious download host or redirect | HTTPS only. Every byte is verified against the signed manifest before use. |
+| Signing key compromise | The key lives only with the owner and in an Actions secret. Rotation by shipping a release that trusts the new key. The residual risk is documented. |
+| Privilege escalation | None: user units only (`systemd-run --user`, `systemctl --user`). The existing CI grep covers it. |
