@@ -18,6 +18,7 @@ LIB = [
     {"app_id": 413150, "name": "Stardew Valley", "kind": "game", "status": "installed", "size_on_disk": 708901690, "library": "lib0"},
     {"app_id": 204360, "name": "Castle Crashers", "kind": "game", "status": "installed", "last_played": "2026-11-17T01:47:20Z"},
     {"app_id": 1493710, "name": "Proton Experimental", "kind": "tool", "status": "installed"},
+    {"app_id": 4244106195, "name": "Hollow Acre", "kind": "shortcut", "status": "installed", "last_played": "2026-11-17T02:19:37Z"},
 ]
 
 
@@ -47,9 +48,9 @@ async def setup(hass: HomeAssistant, client, transport: str = "local"):
 async def test_library_list_and_get(hass: HomeAssistant, client) -> None:
     agent, entry, device_id, _ = await setup(hass, client)
     res = await hass.services.async_call(DOMAIN, "list_games", {"device_id": device_id}, blocking=True, return_response=True)
-    assert [g["name"] for g in res["games"]] == ["Castle Crashers", "Stardew Valley"] and res["revision"] == 1
+    assert [g["name"] for g in res["games"]] == ["Castle Crashers", "Hollow Acre", "Stardew Valley"] and res["revision"] == 1
     res = await hass.services.async_call(DOMAIN, "list_games", {"device_id": device_id, "include_tools": True}, blocking=True, return_response=True)
-    assert res["count"] == 3
+    assert res["count"] == 4
     game = await hass.services.async_call(DOMAIN, "get_game", {"device_id": device_id, "app_id": 413150}, blocking=True, return_response=True)
     assert game["name"] == "Stardew Valley" and "library" not in game
     with pytest.raises(ServiceValidationError):
@@ -146,3 +147,37 @@ async def test_game_and_download_sensors(hass: HomeAssistant, client) -> None:
     eid = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, f"{agent.device_id}_game_current_name")
     assert hass.states.get(eid).attributes["app_id"] == 204360
     assert float(st(hass, agent.device_id, "game_session_duration_s")) == 10
+
+
+async def test_launch_shortcut_sends_u32(hass: HomeAssistant, client) -> None:
+    agent, entry, device_id, _ = await setup(hass, client)
+
+    async def device_side():
+        cmd = await agent.recv(timeout=5)
+        # The canonical key travels; the agent derives the 64-bit GameID itself (ADR-0008 D3).
+        assert cmd["body"]["args"] == {"app_id": 4244106195}
+        await agent.send("command_result", {"command_id": cmd["body"]["command_id"], "state": "dispatched"})
+
+    task = asyncio.create_task(device_side())
+    res = await hass.services.async_call(DOMAIN, "launch_game", {"device_id": device_id, "app_id": 4244106195}, blocking=True, return_response=True)
+    await task
+    assert res["name"] == "Hollow Acre"
+
+
+async def test_ui_mode_and_session_sensors(hass: HomeAssistant, client) -> None:
+    agent, entry, device_id, _ = await setup(hass, client)
+    await agent.telemetry(
+        [
+            {"key": "steam.ui_mode", "value": "gamepad"},
+            {"key": "session.type", "value": "desktop"},
+            {"key": "library.shortcuts", "value": 7},
+        ]
+    )
+    await settle(hass)
+    assert st(hass, agent.device_id, "steam_ui_mode") == "gamepad"  # Big Picture inside Desktop Mode
+    assert st(hass, agent.device_id, "session_type") == "desktop"
+    assert st(hass, agent.device_id, "library_shortcuts") == "7"
+    await agent.telemetry([{"key": "steam.ui_mode", "value": "unknown:9"}, {"key": "session.type", "value": None, "reason": "neither"}])
+    await settle(hass)
+    assert st(hass, agent.device_id, "steam_ui_mode") == "unknown"
+    assert st(hass, agent.device_id, "session_type") in ("unknown", "unavailable")

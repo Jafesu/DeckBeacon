@@ -1,0 +1,5 @@
+[2026-11-16 20:09:57] SSGL: UI mode (0->7)
+[2026-11-16 20:19:37] AppID 18228297308309553152 adding PID 11604 as a tracked process "/home/CANARY_USER/.local/share/Steam/steamrt64/steam-launch-wrapper --oom-score-adjust 900 -- /home/CANARY_USER/.local/share/Steam/steamrt64/reaper SteamLaunch AppId=4244106195 -- "/home/CANARY_USER/Downloads/hollow_acre.x86_64""
+[2026-11-16 20:19:38] SSGL: change [-50861101] LCT -2000974336->0
+[2026-11-16 20:20:38] Remove -50861101 from running list
+[2026-11-16 20:24:00] SSGL: UI mode (7->4)

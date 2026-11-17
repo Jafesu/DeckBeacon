@@ -1,6 +1,6 @@
 # ADR-0008: Game detection, non-Steam shortcuts, and shortcut ID normalization
 
-Status: Proposed (M6, 2026-11-17)
+Status: Accepted (owner approved 2026-11-17; M6)
 
 ## Context
 The G15 discovery (`docs/research/evidence/G15-m6-discovery-2026-11-17.md`, sections 7–12) captured a Proton game (Cyberpunk 2077) and a native non-Steam shortcut (Hollow Acre) starting and stopping. It also read `shortcuts.vdf` with the owner's approval and traced the Steam UI mode. The discovery left three questions for M6.
@@ -56,3 +56,13 @@ Facts that drive the decisions:
 ## Validation
 - Unit tests: a binary-VDF fixture built from the section 11 shape (synthetic names and paths), with a canary `exe`/`LaunchOptions` value asserted to never reach the output. Normalization table tests using the three recorded forms of all 8 ids. The UI-mode tailer is tested with rotation, truncation, and lines that carry paths.
 - G15 (owner-approved, read-only except the one launch): the library shows the 7 non-hidden shortcuts with names. Starting and stopping Hollow Acre gives `game_started`/`game_stopped` named "Hollow Acre". Switching Big Picture changes `steam.ui_mode`. One shortcut launch from HA.
+
+## Implementation (2026-11-17)
+- `internal/steam/shortcuts.go`: binary-VDF reader with the D2 allowlist, `ParseID`/`NormalizeID`, `ShortcutGameID`.
+- `internal/steam/procs.go`: `ScanProcs`: reaper games with the exe-name fallback, plus the session type.
+- `internal/steam/uimode.go`: the UI-mode-only tailer.
+- `internal/games`: shortcuts in the library, the `library.shortcuts` / `steam.ui_mode` / `session.type` metrics, and shortcut launch via the GameID.
+- Protocol 1.3, plus fixtures (`library_page` with a shortcut, `library_shortcut_gameid` invalid).
+- HA: three sensors; `list_games` includes shortcuts.
+- Tests: canary `Exe`/`LaunchOptions`/`tags` values never leave the parser or reach a library page. Every recorded ID form for all 8 G15 shortcuts is covered. Tailer tests cover rotation, truncation and partial lines. The process scan uses the recorded launch-client and supervisor shapes.
+- Still open: the G15 hardware checks listed under Validation.

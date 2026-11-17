@@ -62,7 +62,7 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     async def list_games(call: ServiceCall) -> ServiceResponse:
         rt = _runtime(hass, call.data[ATTR_DEVICE_ID])
-        games = [_public(g) for g in sorted(rt.library.values(), key=lambda g: g["name"].lower()) if call.data[ATTR_INCLUDE_TOOLS] or g["kind"] == "game"]
+        games = [_public(g) for g in sorted(rt.library.values(), key=lambda g: g["name"].lower()) if call.data[ATTR_INCLUDE_TOOLS] or g["kind"] != "tool"]
         return {"games": games, "count": len(games), "revision": rt.library_revision}
 
     async def get_game(call: ServiceCall) -> ServiceResponse:

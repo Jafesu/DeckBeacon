@@ -156,6 +156,24 @@
       },
       "download_eta": {
         "name": "Download time remaining"
+      },
+      "shortcuts": {
+        "name": "Non-Steam shortcuts"
+      },
+      "steam_ui_mode": {
+        "name": "Steam UI mode",
+        "state": {
+          "gamepad": "Gamepad UI",
+          "desktop": "Desktop UI",
+          "unknown": "Unknown"
+        }
+      },
+      "session_type": {
+        "name": "Session",
+        "state": {
+          "gaming": "Gaming Mode",
+          "desktop": "Desktop Mode"
+        }
       }
     },
     "binary_sensor": {

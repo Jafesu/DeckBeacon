@@ -1,5 +1,5 @@
 {
-  "description": "library snapshot page (1.2)",
+  "description": "library snapshot page (1.2) with a non-Steam shortcut (1.3)",
   "schema": "envelope",
   "message": {
     "v": 1,
@@ -27,6 +27,13 @@
           "name": "Proton Experimental",
           "kind": "tool",
           "status": "installed"
+        },
+        {
+          "app_id": 4244106195,
+          "name": "Hollow Acre",
+          "kind": "shortcut",
+          "status": "installed",
+          "last_played": "2026-11-17T02:19:37Z"
         }
       ]
     }

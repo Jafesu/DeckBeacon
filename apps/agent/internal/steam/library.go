@@ -15,6 +15,8 @@ type Kind string
 const (
 	KindGame Kind = "game"
 	KindTool Kind = "tool" // Proton, Steam Linux Runtime, redistributables
+	// KindShortcut is a non-Steam game added to Steam (shortcuts.vdf, ADR-0008).
+	KindShortcut Kind = "shortcut"
 )
 
 // knownTools are Valve tool/runtime app ids observed in real libraries
@@ -120,6 +122,8 @@ type LibraryFolder struct {
 type Library struct {
 	Folders []LibraryFolder
 	Games   []Game
+	// ShortcutsErr is set when a shortcuts.vdf could not be parsed (no path).
+	ShortcutsErr error
 }
 
 // SteamRoot locates the Steam installation under home (or returns "").
@@ -209,6 +213,15 @@ func Scan(steamRoot string) (*Library, error) {
 			})
 		}
 	}
+	shortcuts, err := ReadShortcuts(steamRoot)
+	lib.ShortcutsErr = err
+	for _, sc := range shortcuts {
+		if seen[sc.AppID] {
+			continue
+		}
+		seen[sc.AppID] = true
+		lib.Games = append(lib.Games, Game{AppID: sc.AppID, Name: sc.Name, Kind: KindShortcut, KindConfidence: "confirmed", Status: "installed", LastPlayed: sc.LastPlayed})
+	}
 	sort.Slice(lib.Games, func(i, j int) bool { return lib.Games[i].AppID < lib.Games[j].AppID })
 	return lib, nil
 }
@@ -223,9 +236,13 @@ func (l *Library) Find(id uint32) *Game {
 	return nil
 }
 
-// Counts returns installed games (excluding tools) and entries needing an update.
-func (l *Library) Counts() (games, updates int) {
+// Counts returns installed Steam games (excluding tools and shortcuts),
+// entries needing an update, and non-Steam shortcuts.
+func (l *Library) Counts() (games, updates, shortcuts int) {
 	for _, g := range l.Games {
+		if g.Kind == KindShortcut {
+			shortcuts++
+		}
 		if g.Kind != KindGame {
 			continue
 		}
@@ -234,5 +251,5 @@ func (l *Library) Counts() (games, updates int) {
 			updates++
 		}
 	}
-	return games, updates
+	return games, updates, shortcuts
 }

@@ -33,10 +33,12 @@ type Tracker struct {
 func NewTracker() *Tracker { return &Tracker{active: map[uint32]*Session{}} }
 
 // Update compares the running set with the active sessions.
-func (t *Tracker) Update(running []uint32, lib *Library, now time.Time) []Change {
+// A game missing from the library is named after its launched program.
+func (t *Tracker) Update(running []Running, lib *Library, now time.Time) []Change {
 	var out []Change
 	cur := map[uint32]bool{}
-	for _, id := range running {
+	for _, r := range running {
+		id := r.AppID
 		cur[id] = true
 		if _, ok := t.active[id]; ok {
 			continue
@@ -49,6 +51,9 @@ func (t *Tracker) Update(running []uint32, lib *Library, now time.Time) []Change
 				}
 				name = g.Name
 			}
+		}
+		if name == "" {
+			name = r.Exe
 		}
 		s := &Session{AppID: id, Name: name, Started: now.Round(0).UTC(), mono: now}
 		t.active[id] = s

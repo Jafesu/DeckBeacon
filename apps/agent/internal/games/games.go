@@ -24,8 +24,10 @@ type Event struct {
 	Data map[string]any
 }
 
-// Launcher starts a Steam URL (production: `steam steam://rungameid/<id>`, detached).
-type Launcher func(appID uint32) error
+// Launcher starts a Steam URL (production: `steam steam://rungameid/<gameID>`,
+// detached). gameID is a decimal string: the appid for a Steam game, the
+// 64-bit GameID for a shortcut (ADR-0008 D3).
+type Launcher func(gameID string) error
 
 // Config wires the provider.
 type Config struct {
@@ -50,6 +52,8 @@ type Provider struct {
 	events   chan Event
 	prevStat map[uint32]string
 	scanErr  error
+	uiMode   *steam.UIModeWatcher
+	session  string
 }
 
 // New creates a provider. An empty SteamRoot means Steam is not installed.
@@ -72,13 +76,20 @@ func New(cfg Config) *Provider {
 	if cfg.Launch == nil {
 		cfg.Launch = SteamURLLauncher
 	}
-	return &Provider{cfg: cfg, tracker: steam.NewTracker(), events: make(chan Event, 64), prevStat: map[uint32]string{}}
+	p := &Provider{cfg: cfg, tracker: steam.NewTracker(), events: make(chan Event, 64), prevStat: map[uint32]string{}, session: "unknown"}
+	if cfg.SteamRoot != "" {
+		p.uiMode = steam.NewUIModeWatcher(cfg.SteamRoot)
+	}
+	return p
 }
 
 // SteamURLLauncher hands steam://rungameid/<id> to the running Steam client.
-// Fixed argv, no shell; the id is a validated uint32 (threat model T11).
-func SteamURLLauncher(appID uint32) error {
-	cmd := exec.Command("steam", "steam://rungameid/"+strconv.FormatUint(uint64(appID), 10))
+// Fixed argv, no shell; the id must be all digits (threat model T11).
+func SteamURLLauncher(gameID string) error {
+	if _, err := strconv.ParseUint(gameID, 10, 64); err != nil {
+		return fmt.Errorf("invalid game id")
+	}
+	cmd := exec.Command("steam", "steam://rungameid/"+gameID)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -177,9 +188,13 @@ func sameLibrary(a, b *steam.Library) bool {
 }
 
 func (p *Provider) poll() {
-	running := steam.RunningApps(p.cfg.ProcRoot)
+	procs := steam.ScanProcs(p.cfg.ProcRoot)
 	p.mu.Lock()
-	changes := p.tracker.Update(running, p.lib, p.cfg.Now())
+	changes := p.tracker.Update(procs.Running, p.lib, p.cfg.Now())
+	p.session = procs.Session
+	if p.uiMode != nil {
+		p.uiMode.Poll()
+	}
 	p.mu.Unlock()
 	for _, c := range changes {
 		data := map[string]any{"app_id": c.Session.AppID, "name": c.Session.Name, "started_at": c.Session.Started.Format(time.RFC3339)}
@@ -216,11 +231,23 @@ func (p *Provider) Metrics() []collect.Metric {
 			out = append(out, m(k, nil, "", "no game running"))
 		}
 	}
+	if p.session == "unknown" {
+		out = append(out, m("session.type", nil, "", "neither gamescope nor Plasma is running"))
+	} else {
+		out = append(out, m("session.type", p.session, "", ""))
+	}
+	if p.uiMode != nil {
+		ui := m("steam.ui_mode", nonEmpty(p.uiMode.Mode()), "", "no UI mode line in Steam's log yet")
+		if ui.Value != nil {
+			ui.Source = "steam gameprocess_log (SSGL UI mode)"
+		}
+		out = append(out, ui)
+	}
 	if p.lib == nil {
 		return out
 	}
-	games, updates := p.lib.Counts()
-	out = append(out, m("library.games", games, "", ""), m("library.updates", updates, "", ""))
+	games, updates, shortcuts := p.lib.Counts()
+	out = append(out, m("library.games", games, "", ""), m("library.updates", updates, "", ""), m("library.shortcuts", shortcuts, "", ""))
 	var dl *steam.Game
 	for i := range p.lib.Games {
 		g := &p.lib.Games[i]
@@ -270,7 +297,10 @@ func (p *Provider) LibraryPages() (revision uint64, pages []map[string]any) {
 	}
 	var games []map[string]any
 	for _, g := range p.lib.Games {
-		e := map[string]any{"app_id": g.AppID, "name": g.Name, "kind": string(g.Kind), "status": g.Status, "size_on_disk": g.SizeOnDisk, "library": g.Library}
+		e := map[string]any{"app_id": g.AppID, "name": g.Name, "kind": string(g.Kind), "status": g.Status}
+		if g.Kind != steam.KindShortcut {
+			e["size_on_disk"], e["library"] = g.SizeOnDisk, g.Library
+		}
 		if g.BuildID != "" {
 			e["build_id"] = g.BuildID
 		}
@@ -308,17 +338,28 @@ func (p *Provider) Capabilities() []collect.Capability {
 			{ID: "game.current", Status: "unavailable", Tier: "files", Source: "process table", Reason: reason},
 			{ID: "downloads.status", Status: "unavailable", Tier: "files", Source: "appmanifest", Reason: reason},
 			{ID: "game.launch", Status: "unavailable", Tier: "steam_url", Source: "steam://rungameid", Reason: reason},
+			{ID: "game.shortcuts", Status: "unavailable", Tier: "files", Source: "shortcuts.vdf", Reason: reason},
+			{ID: "game.launch_shortcut", Status: "unavailable", Tier: "steam_url", Source: "steam://rungameid", Reason: reason},
+			{ID: "steam.ui_mode", Status: "unavailable", Tier: "files", Source: "gameprocess_log", Reason: reason},
 		}
 	}
 	lib := collect.Capability{ID: "game.library", Status: "available", Tier: "files", Source: "libraryfolders.vdf + appmanifest", Privilege: "none"}
 	if p.scanErr != nil {
 		lib.Status, lib.Reason = "unavailable", p.scanErr.Error()
 	}
+	sc := collect.Capability{ID: "game.shortcuts", Status: "available", Tier: "files", Source: "shortcuts.vdf (appid, AppName, LastPlayTime, IsHidden only)", Privilege: "none"}
+	if p.lib != nil && p.lib.ShortcutsErr != nil {
+		sc.Status, sc.Reason = "unavailable", p.lib.ShortcutsErr.Error()
+	}
 	return []collect.Capability{
 		lib,
 		{ID: "game.current", Status: "available", Tier: "files", Source: "reaper SteamLaunch process", Privilege: "none"},
 		{ID: "downloads.status", Status: "available", Tier: "files", Source: "appmanifest StateFlags/Bytes*", Privilege: "none"},
 		{ID: "game.launch", Status: "available", Tier: "steam_url", Source: "steam://rungameid", Privilege: "user"},
+		sc,
+		{ID: "game.launch_shortcut", Status: "available", Tier: "steam_url", Source: "steam://rungameid (64-bit GameID)", Privilege: "user", Reason: "experimental: not yet verified on hardware"},
+		{ID: "steam.ui_mode", Status: "available", Tier: "files", Source: "gameprocess_log (UI mode lines only)", Privilege: "none"},
+		{ID: "session.type", Status: "available", Tier: "files", Source: "process table (gamescope / Plasma)", Privilege: "none"},
 	}
 }
 
@@ -344,7 +385,7 @@ func (p *Provider) LaunchHandler() dispatch.Handler {
 		switch {
 		case g == nil:
 			return reject(cmd, "invalid_args", fmt.Sprintf("app %d is not installed", args.AppID)), nil
-		case g.Kind != steam.KindGame:
+		case g.Kind == steam.KindTool:
 			return reject(cmd, "invalid_args", g.Name+" is a tool, not a game"), nil
 		case g.Status != "installed":
 			return reject(cmd, "unavailable", g.Name+" is not ready ("+g.Status+")"), nil
@@ -352,7 +393,11 @@ func (p *Provider) LaunchHandler() dispatch.Handler {
 		if s := p.current(); s != nil && s.AppID == args.AppID {
 			return dispatch.Result{CommandID: cmd.CommandID, State: "confirmed", Result: map[string]any{"app_id": args.AppID, "already_running": true}}, nil
 		}
-		if err := p.cfg.Launch(args.AppID); err != nil {
+		gameID := strconv.FormatUint(uint64(args.AppID), 10)
+		if g.Kind == steam.KindShortcut {
+			gameID = steam.ShortcutGameID(args.AppID)
+		}
+		if err := p.cfg.Launch(gameID); err != nil {
 			return dispatch.Result{CommandID: cmd.CommandID, State: "failed", Error: &dispatch.Error{Code: "internal", Message: "could not hand the launch to Steam: " + err.Error()}}, nil
 		}
 		dispatched := dispatch.Result{CommandID: cmd.CommandID, State: "dispatched", Result: map[string]any{"app_id": args.AppID}}

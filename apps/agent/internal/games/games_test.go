@@ -104,8 +104,8 @@ func cmd(name string, args string) dispatch.Command {
 
 func TestLaunch(t *testing.T) {
 	sr, proc := fixture(t)
-	var launched []uint32
-	p := New(Config{SteamRoot: sr, ProcRoot: proc, LaunchWait: 3 * time.Second, Launch: func(id uint32) error {
+	var launched []string
+	p := New(Config{SteamRoot: sr, ProcRoot: proc, LaunchWait: 3 * time.Second, Launch: func(id string) error {
 		launched = append(launched, id)
 		startGame(t, proc, "900", "413150") // the "game" appears shortly after
 		return nil
@@ -122,7 +122,7 @@ func TestLaunch(t *testing.T) {
 		t.Fatal("refused launches must never reach Steam")
 	}
 	r, follow := h(context.Background(), cmd("launch_game", `{"app_id": 413150}`))
-	if r.State != "dispatched" || follow == nil || len(launched) != 1 || launched[0] != 413150 {
+	if r.State != "dispatched" || follow == nil || len(launched) != 1 || launched[0] != "413150" {
 		t.Fatalf("dispatch %+v %v", r, launched)
 	}
 	if fr := follow(context.Background()); fr.State != "confirmed" {
@@ -132,7 +132,7 @@ func TestLaunch(t *testing.T) {
 
 func TestLaunchTimesOut(t *testing.T) {
 	sr, proc := fixture(t)
-	p := New(Config{SteamRoot: sr, ProcRoot: proc, LaunchWait: 1500 * time.Millisecond, Launch: func(uint32) error { return nil }})
+	p := New(Config{SteamRoot: sr, ProcRoot: proc, LaunchWait: 1500 * time.Millisecond, Launch: func(string) error { return nil }})
 	p.scan(true)
 	_, follow := p.LaunchHandler()(context.Background(), cmd("launch_game", `{"app_id": 413150}`))
 	if fr := follow(context.Background()); fr.State != "failed" || fr.Error.Code != "unavailable" {
@@ -145,7 +145,7 @@ func TestLibraryPagesAndNoSteam(t *testing.T) {
 	p := New(Config{SteamRoot: sr, ProcRoot: proc})
 	p.scan(true)
 	rev, pages := p.LibraryPages()
-	if rev != 1 || len(pages) != 1 || len(pages[0]["games"].([]map[string]any)) != 7 {
+	if rev != 1 || len(pages) != 1 || len(pages[0]["games"].([]map[string]any)) != 11 { // 7 manifests + 4 visible shortcuts
 		t.Fatalf("pages rev=%d %+v", rev, pages)
 	}
 	raw, _ := json.Marshal(pages)
@@ -161,5 +161,50 @@ func TestLibraryPagesAndNoSteam(t *testing.T) {
 		if c.Status != "unavailable" {
 			t.Fatalf("no Steam: %+v", c)
 		}
+	}
+}
+
+func TestLaunchShortcutUsesGameID(t *testing.T) {
+	sr, proc := fixture(t)
+	var launched []string
+	p := New(Config{SteamRoot: sr, ProcRoot: proc, LaunchWait: 3 * time.Second, Launch: func(id string) error {
+		launched = append(launched, id)
+		startGame(t, proc, "901", "4244106195")
+		return nil
+	}})
+	p.scan(true)
+	h := p.LaunchHandler()
+	if r, _ := h(context.Background(), cmd("launch_game", `{"app_id": 3922850944}`)); r.State != "rejected" {
+		t.Fatalf("hidden shortcut must not be launchable: %+v", r)
+	}
+	r, follow := h(context.Background(), cmd("launch_game", `{"app_id": 4244106195}`))
+	if r.State != "dispatched" || len(launched) != 1 || launched[0] != "18228297308309553152" {
+		t.Fatalf("dispatch %+v %v", r, launched)
+	}
+	if fr := follow(context.Background()); fr.State != "confirmed" {
+		t.Fatalf("follow-up %+v", fr)
+	}
+	if metric(p, "game.current.name") != "Hollow Acre" || metric(p, "library.shortcuts") != 4 {
+		t.Fatalf("metrics %v %v", metric(p, "game.current.name"), metric(p, "library.shortcuts"))
+	}
+	_, pages := p.LibraryPages()
+	raw, _ := json.Marshal(pages)
+	if strings.Contains(string(raw), "CANARY") || !strings.Contains(string(raw), `"kind":"shortcut"`) {
+		t.Fatalf("library page: %s", raw)
+	}
+}
+
+func TestUIModeAndSessionMetrics(t *testing.T) {
+	sr, proc := fixture(t)
+	p := New(Config{SteamRoot: sr, ProcRoot: proc})
+	p.poll()
+	if metric(p, "steam.ui_mode") != "gamepad" || metric(p, "session.type") != nil {
+		t.Fatalf("ui=%v session=%v", metric(p, "steam.ui_mode"), metric(p, "session.type"))
+	}
+	_ = os.MkdirAll(filepath.Join(proc, "7"), 0o755)
+	_ = os.WriteFile(filepath.Join(proc, "7", "comm"), []byte("plasmashell\n"), 0o644)
+	p.poll()
+	if metric(p, "session.type") != "desktop" {
+		t.Fatalf("session=%v", metric(p, "session.type"))
 	}
 }

@@ -32,14 +32,14 @@ func TestScanRecordedG15Library(t *testing.T) {
 	if len(lib.Folders) != 2 || !lib.Folders[0].Present || lib.Folders[1].Present || !lib.Folders[1].Removable {
 		t.Fatalf("folders %+v (SD card listed but not mounted)", lib.Folders)
 	}
-	if len(lib.Games) != 7 { // the truncated manifest is skipped
+	if len(lib.Games) != 11 { // 7 manifests (the truncated one skipped) + 4 visible shortcuts
 		t.Fatalf("got %d entries", len(lib.Games))
 	}
-	games, updates := lib.Counts()
-	if games != 4 || updates != 1 {
+	games, updates, shortcuts := lib.Counts()
+	if games != 4 || updates != 1 || shortcuts != 4 {
 		t.Fatalf("games=%d updates=%d", games, updates)
 	}
-	for id, want := range map[uint32]Kind{228980: KindTool, 1493710: KindTool, 1628350: KindTool, 1091500: KindGame, 204360: KindGame} {
+	for id, want := range map[uint32]Kind{228980: KindTool, 1493710: KindTool, 1628350: KindTool, 1091500: KindGame, 204360: KindGame, 4244106195: KindShortcut} {
 		if g := lib.Find(id); g == nil || g.Kind != want {
 			t.Errorf("%d kind %+v", id, g)
 		}
@@ -91,8 +91,8 @@ func TestRunningAppsAndTracker(t *testing.T) {
 	write("101", "/usr/bin/bash -c echo AppId=999")                // not reaper
 	write("102", "/x/reaper SteamLaunch AppId=1628350 -- runtime") // a tool
 	write("103", "/x/reaper -- SteamLaunch AppId=777")             // after "--": ignored
-	got := RunningApps(proc)
-	if len(got) != 2 || got[0] != 204360 || got[1] != 1628350 {
+	got := ScanProcs(proc).Running
+	if len(got) != 2 || got[0].AppID != 204360 || got[1].AppID != 1628350 {
 		t.Fatalf("running %v", got)
 	}
 

@@ -146,6 +146,21 @@ METRICS: dict[str, MetricDescription] = {
         ),
         MetricDescription(key="library.games", translation_key="installed_games", state_class=_M),
         MetricDescription(key="library.updates", translation_key="updates_available", state_class=_M),
+        MetricDescription(key="library.shortcuts", translation_key="shortcuts", state_class=_M),
+        MetricDescription(
+            key="steam.ui_mode",
+            translation_key="steam_ui_mode",
+            device_class=SensorDeviceClass.ENUM,
+            options=["gamepad", "desktop", "unknown"],
+            convert=lambda v: None if v is None else (v if v in ("gamepad", "desktop") else "unknown"),
+        ),
+        MetricDescription(
+            key="session.type",
+            translation_key="session_type",
+            device_class=SensorDeviceClass.ENUM,
+            options=["gaming", "desktop"],
+            convert=lambda v: v if v in ("gaming", "desktop") else None,
+        ),
         MetricDescription(
             key="downloads.status",
             translation_key="download_status",

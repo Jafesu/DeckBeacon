@@ -1,0 +1,25 @@
+{
+  "description": "a shortcut's 64-bit GameID is never sent as app_id (canonical key is u32, ADR-0008 D3)",
+  "schema": "envelope",
+  "error_path": "/body/games/0/app_id",
+  "message": {
+    "v": 1,
+    "type": "library",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAKB3",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "revision": 3,
+      "page": 1,
+      "pages": 1,
+      "games": [
+        {
+          "app_id": 18228297308309553152,
+          "name": "Hollow Acre",
+          "kind": "shortcut",
+          "status": "installed"
+        }
+      ]
+    }
+  }
+}
