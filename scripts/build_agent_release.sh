@@ -7,11 +7,12 @@
 #              keys built into the agent).
 set -euo pipefail
 out="${1:?usage: build_agent_release.sh OUTDIR}"
+mkdir -p "$out"
+out="$(cd "$out" && pwd)" # absolute: the builds run from apps/agent
 root="$(cd "$(dirname "$0")/.." && pwd)"
 version="$(tr -d '[:space:]' < "$root/apps/agent/VERSION")"
 commit="$(git -C "$root" rev-parse --short HEAD)"
 min_integration="$(tr -d '[:space:]' < "$root/apps/agent/MIN_INTEGRATION")"
-mkdir -p "$out"
 pkg=github.com/jafesu/deckbeacon/apps/agent/internal/buildinfo
 for arch in amd64 arm64; do
   (cd "$root/apps/agent" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \

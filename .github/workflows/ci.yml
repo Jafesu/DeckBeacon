@@ -72,10 +72,10 @@ jobs:
           (cd apps/agent && go build -o /tmp/db ./cmd/deckbeacon)
           /tmp/db release keygen --out /tmp/k.pem > /tmp/keygen.txt
           export DECKBEACON_RELEASE_KEY="$(cat /tmp/k.pem)" VERIFY_PUB="$(tail -1 /tmp/keygen.txt)"
-          scripts/build_agent_release.sh /tmp/dist
+          scripts/build_agent_release.sh dist   # relative, exactly like the release workflow
           # Tampering is caught.
-          echo x >> /tmp/dist/deckbeacon-linux-arm64
-          if /tmp/db release verify --pub "$VERIFY_PUB" --in /tmp/dist/release.json --sig /tmp/dist/release.json.sig deckbeacon-linux-arm64=/tmp/dist/deckbeacon-linux-arm64; then echo "tampered artifact accepted"; exit 1; fi
+          echo x >> dist/deckbeacon-linux-arm64
+          if /tmp/db release verify --pub "$VERIFY_PUB" --in dist/release.json --sig dist/release.json.sig deckbeacon-linux-arm64=dist/deckbeacon-linux-arm64; then echo "tampered artifact accepted"; exit 1; fi
 
   protocol-python:
     name: Protocol contract (Python)
