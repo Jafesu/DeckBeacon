@@ -7,6 +7,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/jafesu/deckbeacon/packages/protocol v0.0.0
 	go.etcd.io/bbolt v1.4.3
+	golang.org/x/image v0.48.0
 	golang.org/x/net v0.62.0
 )
 

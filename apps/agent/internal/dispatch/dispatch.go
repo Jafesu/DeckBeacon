@@ -36,6 +36,15 @@ type Result struct {
 	State     string         `json:"state"`
 	Error     *Error         `json:"error,omitempty"`
 	Result    map[string]any `json:"result,omitempty"`
+	// Attachments are messages the session sends before this result (e.g.
+	// artwork chunks, protocol 1.4). Never persisted or deduplicated.
+	Attachments []Attachment `json:"-"`
+}
+
+// Attachment is one extra protocol message belonging to a result.
+type Attachment struct {
+	Type string
+	Body any
 }
 
 // Handler executes one command kind. It returns the immediate result and,

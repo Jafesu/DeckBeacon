@@ -544,7 +544,7 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 				return err
 			}
 		case r := <-c.cfg.Dispatcher.Late():
-			if _, err := conn.Send(ctx, "command_result", r); err != nil {
+			if err := sendResult(ctx, conn, r); err != nil {
 				return err
 			}
 		case <-flush.C:
@@ -610,7 +610,7 @@ func (c *Client) handle(ctx context.Context, conn *channel.Conn, m *channel.Mess
 			return err
 		}
 		for _, r := range c.cfg.Dispatcher.Handle(ctx, cmd, c.cfg.Now()) {
-			if _, err := conn.Send(ctx, "command_result", r); err != nil {
+			if err := sendResult(ctx, conn, r); err != nil {
 				return err
 			}
 		}
@@ -662,6 +662,17 @@ func (c *Client) rejectInvalid(ctx context.Context, conn *channel.Conn, m *chann
 		return errors.New("invalid message without usable id")
 	}
 	_, err := conn.Send(ctx, "error", map[string]any{"ref_id": m.ID, "error": map[string]string{"code": "unsupported_type", "message": "message not understood by this agent version"}, "fatal": false})
+	return err
+}
+
+// sendResult sends a result's attachments, then the result itself.
+func sendResult(ctx context.Context, conn *channel.Conn, r dispatch.Result) error {
+	for _, a := range r.Attachments {
+		if _, err := conn.Send(ctx, a.Type, a.Body); err != nil {
+			return err
+		}
+	}
+	_, err := conn.Send(ctx, "command_result", r)
 	return err
 }
 

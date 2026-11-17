@@ -1,0 +1,22 @@
+{
+  "description": "artwork kind is an allowlist (no file names/paths)",
+  "schema": "envelope",
+  "error_path": "/body/args/kind",
+  "message": {
+    "v": 1,
+    "type": "command",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAR4",
+    "ts": "2026-11-17T17:00:00Z",
+    "seq": 7,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAR4A",
+      "name": "get_artwork",
+      "args": {
+        "app_id": 1091500,
+        "kind": "../../config/config.vdf"
+      },
+      "ttl_s": 30,
+      "issued_at": "2026-11-17T17:00:00Z"
+    }
+  }
+}

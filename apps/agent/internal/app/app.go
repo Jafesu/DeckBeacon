@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jafesu/deckbeacon/apps/agent/internal/artwork"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/buildinfo"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/collect"
 	"github.com/jafesu/deckbeacon/apps/agent/internal/discovery"
@@ -184,6 +185,7 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 	disp := dispatch.New(st, time.Now)
 	disp.Register("launch_game", "game_management", prov.LaunchHandler())
 	disp.Register("refresh_library", "monitoring", prov.RefreshHandler())
+	disp.Register("get_artwork", "monitoring", artwork.New(gcfg.SteamRoot, prov.IsShortcut).Handler())
 	localPolicy := loadLocalPolicy(e)
 	writeStatus := func(s session.Status) {
 		b, _ := json.MarshalIndent(s, "", "  ")

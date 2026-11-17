@@ -41,3 +41,4 @@ Remove or rename a field; make an optional field required; change a type or mean
 - **1.1** (M3): event type `device_booted` (additive).
 - **1.2** (M6): message type `library` (paged snapshot, no account data). Telemetry keys `game.*`, `library.*`, `downloads.*` (additive). Older receivers treat it as an unknown event type (logged, skipped).
 - **1.3** (M6, ADR-0008): library entry `kind` value `"shortcut"` (non-Steam games, unsigned 32-bit `app_id`). Telemetry keys `library.shortcuts`, `steam.ui_mode`, `session.type` (additive). Telemetry keys `game.activity.*` and capability tier `ipc` (ADR-0007, additive).
+- **1.4** (M8, ADR-0009): command `get_artwork {app_id, kind}` and message type `artwork` (chunked, re-encoded JPEG/PNG, ≤ 32 KiB binary per chunk, ≤ 16 chunks). Older agents answer `rejected/unsupported`; older HA versions ignore `artwork` messages as an unknown type (additive).

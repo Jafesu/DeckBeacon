@@ -1,0 +1,21 @@
+{
+  "description": "get_artwork for a shortcut capsule (1.4)",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "command",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAR1",
+    "ts": "2026-11-17T17:00:00Z",
+    "seq": 7,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAR1A",
+      "name": "get_artwork",
+      "args": {
+        "app_id": 4244106195,
+        "kind": "capsule"
+      },
+      "ttl_s": 30,
+      "issued_at": "2026-11-17T17:00:00Z"
+    }
+  }
+}

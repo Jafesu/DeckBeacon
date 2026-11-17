@@ -1,0 +1,23 @@
+{
+  "description": "artwork chunk 1 of 3 (1.4)",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "artwork",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAR2",
+    "ts": "2026-11-17T17:00:00Z",
+    "seq": 7,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAR1A",
+      "app_id": 1091500,
+      "kind": "capsule",
+      "mime": "image/jpeg",
+      "width": 600,
+      "height": 900,
+      "seq": 0,
+      "total": 3,
+      "sha256": "24ee28919f9ec6db2dfb0b13012b991b1d118e7881d0cc93dbe7e5afeb3ec22d",
+      "data": "/9j/4AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+    }
+  }
+}

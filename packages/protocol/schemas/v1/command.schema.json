@@ -12,7 +12,7 @@
       "enum": ["launch_game", "close_game", "pause_downloads", "resume_downloads", "install_game", "update_game",
                "move_game", "uninstall_game", "set_compatibility_tool", "refresh_library", "list_games", "get_game",
                "dismiss_notification", "get_notification_status", "suspend", "reboot", "shutdown",
-               "set_volume", "set_brightness", "request_diagnostics", "approve_agent_update"]
+               "set_volume", "set_brightness", "request_diagnostics", "approve_agent_update", "get_artwork"]
     },
     "args": {"type": "object", "maxProperties": 16},
     "ttl_s": {"type": "integer", "minimum": 1, "maximum": 86400},
@@ -23,6 +23,10 @@
     {"if": {"properties": {"name": {"enum": ["launch_game", "install_game", "update_game", "uninstall_game", "get_game"]}}},
      "then": {"properties": {"args": {"required": ["app_id"], "additionalProperties": false,
                                       "properties": {"app_id": {"$ref": "common.schema.json#/$defs/app_id"}}}}}},
+    {"if": {"properties": {"name": {"const": "get_artwork"}}},
+     "then": {"properties": {"args": {"required": ["app_id", "kind"], "additionalProperties": false,
+                                      "properties": {"app_id": {"$ref": "common.schema.json#/$defs/app_id"},
+                                                     "kind": {"enum": ["capsule", "header", "hero", "logo"]}}}}}},
     {"if": {"properties": {"name": {"const": "close_game"}}},
      "then": {"properties": {"args": {"required": ["app_id"], "additionalProperties": false,
                                       "properties": {"app_id": {"$ref": "common.schema.json#/$defs/app_id"}, "force": {"type": "boolean"}}}}}},

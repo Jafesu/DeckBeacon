@@ -36,7 +36,8 @@
         "pair_confirm",
         "pair_complete",
         "pair_abort",
-        "library"
+        "library",
+        "artwork"
       ]
     },
     "id": {
@@ -329,6 +330,22 @@
         "properties": {
           "body": {
             "$ref": "library.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "artwork"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "artwork.schema.json"
           }
         }
       }

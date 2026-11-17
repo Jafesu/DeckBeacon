@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -202,5 +203,39 @@ func TestGameChangePushesTelemetryImmediately(t *testing.T) {
 	waitFor(t, "pushed telemetry", func() bool { return len(r.srv.Messages("telemetry")) == 2 })
 	if time.Since(start) > time.Second {
 		t.Fatalf("push took %v", time.Since(start))
+	}
+}
+
+func TestResultAttachmentsSentBeforeResult(t *testing.T) {
+	r := newRig(t)
+	r.cli.cfg.Dispatcher.Register("get_artwork", "monitoring", func(ctx context.Context, cmd dispatch.Command) (dispatch.Result, func(context.Context) dispatch.Result) {
+		chunk := func(seq int) dispatch.Attachment {
+			return dispatch.Attachment{Type: "artwork", Body: map[string]any{"command_id": cmd.CommandID, "app_id": 1091500, "kind": "capsule", "mime": "image/jpeg",
+				"width": 1, "height": 1, "seq": seq, "total": 2, "sha256": strings.Repeat("0", 64), "data": "AAAA"}}
+		}
+		return dispatch.Result{CommandID: cmd.CommandID, State: "confirmed", Attachments: []dispatch.Attachment{chunk(0), chunk(1)}}, nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = r.cli.Run(ctx) }()
+	waitFor(t, "connected", func() bool { return r.cli.Status().State == "connected_local" })
+	cid := ulid.New()
+	r.srv.SendCommand(map[string]any{"command_id": cid, "name": "get_artwork", "args": map[string]any{"app_id": 1091500, "kind": "capsule"}, "ttl_s": 30, "issued_at": time.Now().UTC().Format(time.RFC3339)})
+	waitFor(t, "confirmed", func() bool {
+		for _, m := range r.srv.Messages("command_result") {
+			if strings.Contains(string(m.Body), `"confirmed"`) {
+				return true
+			}
+		}
+		return false
+	})
+	var order []string
+	for _, m := range r.srv.Messages("") {
+		if m.Type == "artwork" || (m.Type == "command_result" && strings.Contains(string(m.Body), cid)) {
+			order = append(order, m.Type)
+		}
+	}
+	if strings.Join(order, ",") != "command_result,artwork,artwork,command_result" { // accepted, chunks, confirmed
+		t.Fatalf("order %v", order)
 	}
 }

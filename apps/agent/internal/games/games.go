@@ -440,6 +440,17 @@ func (p *Provider) LibraryPages() (revision uint64, pages []map[string]any) {
 	return p.revision, pages
 }
 
+// IsShortcut reports whether appID is a non-Steam shortcut in the library.
+func (p *Provider) IsShortcut(appID uint32) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.lib == nil {
+		return false
+	}
+	g := p.lib.Find(appID)
+	return g != nil && g.Kind == steam.KindShortcut
+}
+
 // Revision is the current library revision (0 = not scanned).
 func (p *Provider) Revision() uint64 {
 	p.mu.Lock()
