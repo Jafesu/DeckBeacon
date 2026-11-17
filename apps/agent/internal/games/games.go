@@ -485,7 +485,7 @@ func (p *Provider) capabilities() []collect.Capability {
 		{ID: "downloads.status", Status: "available", Tier: "files", Source: "appmanifest StateFlags/Bytes*", Privilege: "none"},
 		{ID: "game.launch", Status: "available", Tier: "steam_url", Source: "steam://rungameid", Privilege: "user"},
 		sc,
-		{ID: "game.launch_shortcut", Status: "available", Tier: "steam_url", Source: "steam://rungameid (64-bit GameID)", Privilege: "user", Reason: "experimental: not yet verified on hardware"},
+		{ID: "game.launch_shortcut", Status: "available", Tier: "steam_url", Source: "steam://rungameid (64-bit GameID)", Privilege: "user"},
 		{ID: "steam.ui_mode", Status: "available", Tier: "files", Source: "gameprocess_log (UI mode lines only)", Privilege: "none"},
 		{ID: "session.type", Status: "available", Tier: "files", Source: "process table (gamescope / Plasma)", Privilege: "none"},
 	}
