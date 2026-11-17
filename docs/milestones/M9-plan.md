@@ -34,6 +34,18 @@ Status: **In progress** (started 2026-11-17; owner: "let's start on m9"; the G15
 | AC6 signed pipeline | **pass** | With the owner's key (secret + embedded public key), the workflow published `agent/v0.3.0-dev.1` (pre-release). The first run caught a relative-path bug in the build script, which is fixed and now covered by the CI dry run. A dev build querying the real GitHub API offers 0.3.0-dev.1 on the dev channel, verified with the embedded key, and stays "up to date" on stable. The downloaded binary verifies and reports its version. |
 | AC7 no privilege | **pass** | `systemd-run --user`, `systemctl --user` only. CI grep. |
 
+## G15 run 1 (2026-11-17): three bugs found, fixed
+Installing 0.3.0-dev.1 from HA (integration 0.4.0, G15 on HA Cloud) left the device offline on the broken version. Evidence: the G15 session's read-only diagnosis (journal, layout, updater units).
+1. **Strict receivers.** 0.3.0-dev.1 validated received messages against its own strict schemas and rejected the new `welcome.connection_profile` on every connection. COMPATIBILITY.md requires lenient receivers.
+   - **Fix (agent and HA):** receivers validate with `additionalProperties: false` removed. The exceptions are objects marked `x-receiver: closed`: command args, library entries, notification actions and the envelope.
+   - **Tests:** shared `fixtures/receiver/` in Go and Python; every invalid fixture is also checked against the receiver validator. The agent test (a newer HA's welcome) and the HA test (a newer agent's hello and telemetry) both fail without the fix. A closed library entry with account data is still refused.
+2. **Second updater.** The old agent's 30 s step started another updater 7 s after the first.
+   - **Fix:** the client stops after handing over and spends the approval at once. The updater also takes an exclusive lock (`update.lock`) and changes nothing while another one runs.
+3. **Rollback undone.** The second updater was launched through `bin/deckbeacon`, which already pointed at the new version, so its "previous" was the new version itself. The first updater correctly detected the failure ("did not reconnect within 2m0s") and rolled back to a96fdba. The second then "rolled back" onto the broken build.
+   - **Fix:** the updater always runs from `versions/<running version>`. Apply refuses to switch to the version that is already active.
+
+Recovery was manual, with owner approval: `bin/deckbeacon` was repointed at `versions/0.0.0-dev` (a96fdba) and the service restarted. 0.3.0-dev.1 can never talk to integration ≥ 0.4.0; it is superseded by 0.3.0-dev.2.
+
 ## Hardware validation procedure (when the G15 is back)
 1. **Bootstrap (one time, approval needed):** build the agent from this branch on the G15 (RC session) so it contains the update client. It still runs as a from-source `0.0.0-dev`.
 2. **HA:** set the update channel to `dev`. The Agent update entity offers **0.3.0-dev.1**. Press Install. Expect: waits while a game is running, then adopt + switch, the new version reconnects, the entity shows 0.3.0-dev.1 installed, `deckbeacon update status` shows active 0.3.0-dev.1 / previous 0.0.0-dev, pairing intact.

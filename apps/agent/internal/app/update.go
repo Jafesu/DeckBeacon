@@ -40,12 +40,13 @@ func runningExe() string {
 	return exe
 }
 
-// startUpdater runs `<current exe> update apply …` as a transient user unit,
-// independent of deckbeacon.service so it survives the agent's restart.
-func startUpdater(e Env) func(ctx context.Context, args []string) error {
-	return func(ctx context.Context, args []string) error {
+// startUpdater runs `<exe> update apply …` as a transient user unit,
+// independent of deckbeacon.service so it survives the agent's restart. exe is
+// the known-good running version's file, chosen by the update client.
+func startUpdater(e Env) func(ctx context.Context, exe string, args []string) error {
+	return func(ctx context.Context, exe string, args []string) error {
 		unit := "deckbeacon-updater-" + strconv.FormatInt(time.Now().Unix(), 10)
-		cmd := append([]string{"--user", "--unit=" + unit, "--collect", "--quiet", "--", runningExe()}, args...)
+		cmd := append([]string{"--user", "--unit=" + unit, "--collect", "--quiet", "--", exe}, args...)
 		out, err := e.Host.Run(ctx, "systemd-run", cmd...)
 		if err != nil {
 			return fmt.Errorf("systemd-run: %v: %s", err, strings.TrimSpace(string(out)))

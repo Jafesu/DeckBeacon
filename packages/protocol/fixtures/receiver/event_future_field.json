@@ -1,0 +1,25 @@
+{
+  "description": "a newer agent adds an event field",
+  "schema": "envelope",
+  "error_path": "/body",
+  "message": {
+    "v": 1,
+    "type": "event",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "event_id": "01JDAAAAAAAAAAAAAAAAAAAAA7",
+      "event_seq": 42,
+      "event_type": "game_started",
+      "occurred_at": "2026-11-16T17:00:00Z",
+      "live": true,
+      "data": {
+        "app_id": 526870,
+        "source": "reaper",
+        "confidence": "high"
+      },
+      "correlation_id": "abc"
+    }
+  }
+}

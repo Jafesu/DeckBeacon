@@ -47,6 +47,9 @@ type Server struct {
 	Invalid     []string // schema violations seen (must stay empty)
 	// Profile, when set, is sent as welcome.connection_profile (ADR-0011).
 	Profile []map[string]string
+	// WelcomeExtra fields are merged into the welcome body as a newer HA
+	// would send them (not valid for this version's sender schema).
+	WelcomeExtra map[string]any
 	// Mute makes established sessions stop answering (no pong, no ack): a
 	// network that silently drops traffic while TCP looks alive.
 	Mute atomic.Bool
@@ -258,8 +261,12 @@ func (s *Server) session(w http.ResponseWriter, r *http.Request) {
 	if s.Profile != nil {
 		welcome["connection_profile"] = map[string]any{"urls": s.Profile}
 	}
+	for k, v := range s.WelcomeExtra {
+		welcome[k] = v
+	}
+	extra := len(s.WelcomeExtra) > 0
 	s.mu.Unlock()
-	_ = p.send(ctx, "welcome", welcome)
+	_ = p.sendOpt(ctx, "welcome", welcome, !extra)
 	in := make(chan Msg, 16)
 	go func() {
 		for {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jafesu/deckbeacon/apps/agent/internal/fsutil"
@@ -45,9 +46,32 @@ func readStatus(path string) AgentStatus {
 	return s
 }
 
+// ErrUpdateInProgress means another updater holds the lock.
+var ErrUpdateInProgress = errors.New("update: another update is already in progress")
+
+// lockUpdater takes an exclusive, non-blocking lock in the state directory,
+// held for the updater's lifetime (released by the kernel if it dies).
+func lockUpdater(stateDir string) (func(), error) {
+	f, err := os.OpenFile(filepath.Join(stateDir, "update.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		f.Close()
+		return nil, ErrUpdateInProgress
+	}
+	return func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN); f.Close() }, nil
+}
+
 // Apply switches to cfg.To, restarts, health-checks and rolls back on failure.
-// It always writes a Result for the next agent process to report.
+// It writes a Result for the next agent process to report, except when another
+// updater is running: then it changes nothing and returns ErrUpdateInProgress.
 func Apply(ctx context.Context, cfg ApplyConfig) (res Result, err error) {
+	unlock, err := lockUpdater(cfg.StateDir)
+	if err != nil {
+		return Result{From: cfg.From, To: cfg.To, Outcome: "failed", Reason: err.Error()}, err
+	}
+	defer unlock()
 	if cfg.HealthTimeout <= 0 {
 		cfg.HealthTimeout = 120 * time.Second
 	}
@@ -80,6 +104,9 @@ func Apply(ctx context.Context, cfg ApplyConfig) (res Result, err error) {
 	}
 	if prev == "" {
 		return res, errors.New("no current version to fall back to")
+	}
+	if prev == cfg.To {
+		return res, fmt.Errorf("version %s is already active; nothing to switch or roll back to", cfg.To)
 	}
 	oldPID := readStatus(cfg.StatusPath).PID
 	if err := l.Switch(cfg.To, prev); err != nil {

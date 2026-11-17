@@ -179,7 +179,7 @@ func (c *Conn) Recv(ctx context.Context) (*Message, error) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		return nil, fmt.Errorf("invalid envelope JSON: %w", err)
 	}
-	if err := protocol.ValidateMessage(raw); err != nil {
+	if err := protocol.ValidateInboundMessage(raw); err != nil { // lenient receiver: unknown fields are ignored
 		return &m, &InvalidMessageError{Type: m.Type, ID: m.ID, Err: err}
 	}
 	return &m, nil

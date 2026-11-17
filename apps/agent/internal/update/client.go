@@ -66,7 +66,7 @@ type Config struct {
 	Integration   func() string // connected HA integration version ("" = unknown)
 	Busy          func() (bool, string)
 	Connected     func() bool
-	StartUpdater  func(ctx context.Context, args []string) error // runs `<exe> update apply …` independently
+	StartUpdater  func(ctx context.Context, exe string, args []string) error // runs `<exe> update apply …` independently
 	Now           func() time.Time
 	Log           *slog.Logger
 	ApprovalValid time.Duration // default 7 days
@@ -89,6 +89,10 @@ type Client struct {
 	checked   time.Time
 	events    chan Event
 	wake      chan struct{}
+	// handedOver is set once an updater has been started: this process is
+	// about to be replaced and must never start a second one (found on the
+	// G15: a second updater undid the first one's rollback).
+	handedOver bool
 }
 
 type approval struct {
@@ -520,6 +524,12 @@ func (c *Client) Run(ctx context.Context) {
 
 // step applies an approved update when it is safe.
 func (c *Client) step(ctx context.Context) {
+	c.mu.Lock()
+	handedOver := c.handedOver
+	c.mu.Unlock()
+	if handedOver {
+		return
+	}
 	a, ok := c.approval()
 	if !ok || !c.Enabled() {
 		return
@@ -584,15 +594,31 @@ func (c *Client) apply(ctx context.Context, cand *candidate) error {
 	if err != nil || json.Unmarshal(out, &info) != nil || info.Version != m.Version {
 		return fmt.Errorf("the new binary does not run or reports the wrong version")
 	}
-	c.setState(StateInstalling, "")
+	// The updater (and with it the rollback) always runs from the known-good
+	// running version's own file, never through bin/deckbeacon, which the
+	// switch repoints.
+	exe := c.cfg.CurrentExe
 	args := []string{"update", "apply", "--to", m.Version, "--from", c.cfg.Current}
 	if c.cfg.Connected() {
 		args = append(args, "--require-connected")
 	}
-	if !l.Managed() {
+	if l.Managed() {
+		if !l.Has(c.cfg.Current) {
+			return fmt.Errorf("the running version %s is not in the managed install", c.cfg.Current)
+		}
+		exe = l.VersionBin(c.cfg.Current)
+	} else {
 		args = append(args, "--adopt", c.cfg.CurrentExe)
 	}
-	return c.cfg.StartUpdater(ctx, args)
+	c.setState(StateInstalling, "")
+	if err := c.cfg.StartUpdater(ctx, exe, args); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	c.handedOver = true
+	c.mu.Unlock()
+	c.clearApproval() // attempted: never retried automatically, whatever happens next
+	return nil
 }
 
 func (c *Client) download(ctx context.Context, url, dst string, size int64) error {

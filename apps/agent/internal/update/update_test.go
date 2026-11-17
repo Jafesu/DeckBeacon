@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -101,6 +102,7 @@ type rig struct {
 	layout   Layout
 	state    string
 	started  [][]string
+	exes     []string
 	busy     bool
 	busyWhy  string
 	conn     bool
@@ -129,8 +131,12 @@ func newRig(t *testing.T, specs ...relSpec) *rig {
 		Layout: r.layout, StateDir: r.state, ConfigDir: filepath.Join(root, "config"), Current: "0.0.0-dev", CurrentExe: r.agentBin, GOARCH: "amd64",
 		ReleasesURL: r.srv.URL + "/releases", HTTP: r.srv.Client(), Keys: []ed25519.PublicKey{pub},
 		Integration: func() string { return r.integ }, Busy: func() (bool, string) { return r.busy, r.busyWhy }, Connected: func() bool { return r.conn },
-		StartUpdater: func(ctx context.Context, args []string) error { r.started = append(r.started, args); return nil },
-		Now:          func() time.Time { return r.clock },
+		StartUpdater: func(ctx context.Context, exe string, args []string) error {
+			r.started = append(r.started, args)
+			r.exes = append(r.exes, exe)
+			return nil
+		},
+		Now: func() time.Time { return r.clock },
 	})
 	return r
 }
@@ -442,5 +448,100 @@ func TestReportResultEmitsOnceAndClearsApproval(t *testing.T) {
 	}
 	if st, _ := r.c.State(); st != StateFailed {
 		t.Fatal(st)
+	}
+}
+
+// ---- G15 regressions (M9 hardware validation) ----
+
+// After handing over, further steps never start a second updater, and the
+// approval is spent. On the G15 the old agent's 30 s tick started a second
+// updater 7 s after the first.
+func TestHandOverHappensOnce(t *testing.T) {
+	r := newRig(t, relSpec{version: "0.3.0"})
+	ctx := context.Background()
+	_ = r.c.Check(ctx)
+	_ = r.c.Approve("0.3.0")
+	r.c.step(ctx)
+	r.c.step(ctx)
+	r.c.step(ctx)
+	if len(r.started) != 1 {
+		t.Fatalf("updater started %d times", len(r.started))
+	}
+	if _, ok := r.c.approval(); ok {
+		t.Fatal("approval must be spent once the updater is started")
+	}
+	if r.exes[0] != r.agentBin {
+		t.Fatalf("unmanaged install: updater must run the running binary, got %s", r.exes[0])
+	}
+}
+
+// In a managed install the updater runs from the running version's own file,
+// even when bin/deckbeacon already points elsewhere. On the G15 it followed
+// the repointed link and ran the new, broken version.
+func TestUpdaterRunsFromTheRunningVersionsFile(t *testing.T) {
+	r := newRig(t, relSpec{version: "0.3.0"})
+	ctx := context.Background()
+	for _, v := range []string{"0.0.0-dev", "0.2.9"} {
+		src := filepath.Join(t.TempDir(), "bin")
+		_ = os.WriteFile(src, fakeBinary(v), 0o755)
+		if err := r.layout.install(src, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = r.layout.Switch("0.2.9", "0.0.0-dev") // the link no longer points at the running version
+	_ = r.c.Check(ctx)
+	_ = r.c.Approve("0.3.0")
+	r.c.step(ctx)
+	if len(r.exes) != 1 || r.exes[0] != r.layout.VersionBin("0.0.0-dev") {
+		t.Fatalf("updater exe %v, want %s", r.exes, r.layout.VersionBin("0.0.0-dev"))
+	}
+	if strings.Contains(strings.Join(r.started[0], " "), "--adopt") {
+		t.Fatal("a managed install is not adopted again")
+	}
+}
+
+// A second updater changes nothing while the first holds the lock.
+func TestApplyRefusesWhileAnotherUpdaterRuns(t *testing.T) {
+	a := newApplyRig(t)
+	a.stage(t, "0.3.0")
+	a.stage(t, "0.4.0")
+	l := a.cfg.Layout
+	_ = l.Switch("0.3.0", "")
+	unlock, err := lockUpdater(a.cfg.StateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := a.cfg
+	cfg.To, cfg.From = "0.4.0", "0.3.0"
+	if _, err := Apply(context.Background(), cfg); !errors.Is(err, ErrUpdateInProgress) {
+		t.Fatalf("got %v", err)
+	}
+	if l.Active() != "0.3.0" || a.restarts != 0 {
+		t.Fatalf("layout touched: active=%s restarts=%d", l.Active(), a.restarts)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.StateDir, "update-result.json")); err == nil {
+		t.Fatal("must not overwrite the running updater's result")
+	}
+	unlock()
+	if res, err := Apply(context.Background(), cfg); err != nil || res.Outcome != "completed" {
+		t.Fatalf("after unlock: %+v %v", res, err)
+	}
+}
+
+// Switching to the version that is already active is refused: its
+// "rollback" would land on the same version (what the G15's second updater did).
+func TestApplyRefusesTheActiveVersion(t *testing.T) {
+	a := newApplyRig(t)
+	a.stage(t, "0.3.0")
+	a.stage(t, "0.4.0")
+	l := a.cfg.Layout
+	_ = l.Switch("0.4.0", "0.3.0")
+	cfg := a.cfg
+	cfg.To, cfg.From = "0.4.0", "0.3.0"
+	if _, err := Apply(context.Background(), cfg); err == nil || !strings.Contains(err.Error(), "already active") {
+		t.Fatalf("got %v", err)
+	}
+	if l.Active() != "0.4.0" || l.Previous() != "0.3.0" || a.restarts != 0 {
+		t.Fatalf("active=%s previous=%s restarts=%d", l.Active(), l.Previous(), a.restarts)
 	}
 }

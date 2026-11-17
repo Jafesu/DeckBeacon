@@ -1,0 +1,39 @@
+{
+  "description": "a newer agent adds a metric field",
+  "schema": "envelope",
+  "error_path": "/body/metrics/0",
+  "message": {
+    "v": 1,
+    "type": "telemetry",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAA1",
+    "ts": "2026-11-16T17:00:00Z",
+    "seq": 1,
+    "body": {
+      "metrics": [
+        {
+          "key": "cpu.usage",
+          "value": 23.5,
+          "unit": "%",
+          "sampled_at": "2026-11-16T17:00:00Z",
+          "source": "/proc/stat",
+          "confidence": "confirmed",
+          "quality": "estimated"
+        },
+        {
+          "key": "battery.level",
+          "value": null,
+          "sampled_at": "2026-11-16T17:00:00Z",
+          "source": "power_supply",
+          "reason": "no battery present"
+        },
+        {
+          "key": "session.mode",
+          "value": "gaming",
+          "sampled_at": "2026-11-16T17:00:00Z",
+          "source": "gamescope-session",
+          "confidence": "high"
+        }
+      ]
+    }
+  }
+}

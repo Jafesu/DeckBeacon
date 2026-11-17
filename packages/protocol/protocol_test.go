@@ -78,6 +78,36 @@ func TestInvalidFixtures(t *testing.T) {
 	}
 }
 
+// Receiver fixtures: a newer minor version's message that this version may not
+// send (strict fails at error_path) but must accept when receiving.
+func TestReceiverFixtures(t *testing.T) {
+	for name, fx := range loadFixtures(t, "receiver") {
+		t.Run(name, func(t *testing.T) {
+			var ve *jsonschema.ValidationError
+			if err := Validate(fx.Schema, fx.Message); !errors.As(err, &ve) || fx.ErrorPath == nil {
+				t.Fatalf("a sender must not emit this (%s): %v", fx.Description, err)
+			} else if got := leafPaths(ve); len(got) != 1 || got[0] != *fx.ErrorPath {
+				t.Fatalf("%s: failing locations %v, want [%q]", fx.Description, got, *fx.ErrorPath)
+			}
+			if err := ValidateInbound(fx.Schema, fx.Message); err != nil {
+				t.Fatalf("a receiver must accept this (%s): %v", fx.Description, err)
+			}
+		})
+	}
+}
+
+// Leniency is only about unknown fields: everything else a sender may not emit
+// is still refused on receipt.
+func TestInvalidFixturesStillInvalidForReceivers(t *testing.T) {
+	for name, fx := range loadFixtures(t, "invalid") {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateInbound(fx.Schema, fx.Message); err == nil {
+				t.Fatalf("receiver accepted %s; move it to fixtures/receiver if it only adds a field", fx.Description)
+			}
+		})
+	}
+}
+
 func TestUnknownSchemaAndBadJSON(t *testing.T) {
 	if err := Validate("nope", []byte(`{}`)); err == nil {
 		t.Fatal("expected error for unknown schema")

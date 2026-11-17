@@ -194,3 +194,25 @@ async def test_wrong_server_key_fails_handshake(hass: HomeAssistant, client, pai
     agent.server_static = noise.KeyPair.generate().public
     with pytest.raises((ConnectionResetError, noise.NoiseError, TimeoutError, TypeError, AttributeError)):
         await agent.connect(client)
+
+
+async def test_newer_agent_fields_are_ignored(hass: HomeAssistant, client, paired) -> None:
+    """Lenient receiver: fields a newer agent adds never break the session
+    (the G15 failure in the other direction, found during M9 validation)."""
+    agent, _ = paired
+    welcome = await agent.connect(client, session_extra={"future_hint": "x"})
+    assert welcome["type"] == "welcome"
+    metric = {"sampled_at": "2026-11-17T08:00:00Z", "source": "sim", "key": "cpu.usage", "value": 12.5, "unit": "%", "quality": "estimated"}
+    await agent.send("telemetry", {"metrics": [metric]}, strict=False)
+    await settle(hass)
+    assert hass.states.get(ent(hass, agent.device_id, "cpu_usage")).state == "12.5"
+
+
+async def test_closed_objects_still_refused_on_receipt(hass: HomeAssistant, client, paired) -> None:
+    """Leniency never extends to account data in library entries."""
+    agent, _ = paired
+    await agent.connect(client)
+    game = {"app_id": 413150, "name": "Stardew Valley", "kind": "game", "status": "installed", "owner": "76561190000000000"}
+    await agent.send("library", {"revision": 1, "page": 1, "pages": 1, "games": [game]}, strict=False)
+    with pytest.raises(ConnectionResetError):
+        await agent.recv()  # HA closes the session instead of storing the field

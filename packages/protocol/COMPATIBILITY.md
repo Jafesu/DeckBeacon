@@ -9,7 +9,14 @@
 ## Senders vs receivers
 - The schemas are **strict** (`additionalProperties: false`, closed enums). They define exactly what a sender of this minor version may emit. CI validates every message a component sends in tests.
 - Receivers are **lenient**:
-  - Unknown object fields are ignored.
+  - Unknown object fields are ignored. Receivers validate against the same schemas with `additionalProperties: false` removed (Go `protocol.ValidateInbound`, HA `load_validator(receiver=True)`). The exceptions are objects marked `"x-receiver": "closed"`, which are security or privacy boundaries and are refused on receipt too:
+    - command `args`, so an unknown argument is never silently dropped;
+    - library entries (no account data);
+    - notification actions (no service calls);
+    - the envelope.
+
+    Shared fixtures in `fixtures/receiver/` pin this. Found on the G15 (M9): agent 0.3.0-dev.1 validated received messages strictly and rejected integration 0.4.0's new `welcome.connection_profile` on every connection.
+  - Types, required fields, formats and bounds are still enforced on receipt. A minor release that relaxes a bound or adds an enum value to a field older receivers validate must only send the new value to peers that announce a version supporting it.
   - An unknown enum value is treated as `unknown` (statuses, modes) or the item is skipped (capability IDs, metric keys, event types). It is logged once and never fatal.
   - An unknown message `type` gets `error{code: unsupported_type, fatal: false}`, and the connection stays up.
   - An unknown command `name` gets `command_result{state: rejected, error.code: unsupported}`.
@@ -17,7 +24,7 @@
 - Never rely on field order. Never reuse a removed field name with a different meaning.
 
 ## Allowed in a minor release
-Add an optional field; add an enum value; add a message type; add a command, metric key, capability ID, or event type; relax a constraint (larger max length).
+Add an optional field (not inside an `x-receiver: closed` object); add an enum value (see the rule above); add a message type; add a command, metric key, capability ID, or event type; relax a constraint (larger max length).
 
 ## Requires a major release
 Remove or rename a field; make an optional field required; change a type or meaning; tighten a constraint; change the security layering (ADR-0002).

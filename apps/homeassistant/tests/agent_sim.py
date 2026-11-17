@@ -41,11 +41,12 @@ class SimAgent:
     def device(self) -> dict[str, Any]:
         return {"device_id": self.device_id, "model": "Steam Deck OLED", "vendor": "Valve", "os": {"id": "steamos", "version_id": "3.7.0"}, "arch": "x86_64"}
 
-    async def send(self, msg_type: str, body: dict[str, Any]) -> str:
+    async def send(self, msg_type: str, body: dict[str, Any], strict: bool = True) -> str:
+        """strict=False sends what a newer agent might (unknown fields)."""
         self.seq += 1
         env = {"v": 1, "type": msg_type, "id": ulid(), "ts": now(), "seq": self.seq, "body": body}
         errs = list(VALIDATOR.iter_errors(env))
-        assert not errs, errs[0].message
+        assert not strict or not errs, errs[0].message
         await self.ws.send_bytes(self.session.seal(json.dumps(env).encode()))
         return env["id"]
 
@@ -80,7 +81,9 @@ class SimAgent:
     async def confirm(self, accepted: bool = True) -> None:
         await self.send("pair_confirm", {"accepted": accepted})
 
-    async def connect(self, client, transport: str = "local", resume: int = 0, via: str | None = None) -> dict[str, Any]:
+    async def connect(
+        self, client, transport: str = "local", resume: int = 0, via: str | None = None, session_extra: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         assert self.server_static is not None
         await self._handshake(client, "/api/deckbeacon/v1/ws", "IK", noise.PROLOGUE_SESSION, self.server_static)
         await self.send(
@@ -90,8 +93,9 @@ class SimAgent:
                 "protocol": {"min": 1, "max": 1},
                 "device": self.device(),
                 "boot_id": "0" * 32,
-                "session": {"mode": "gaming", "transport": transport, "resume_after_event_seq": resume} | ({"via": via} if via else {}),
+                "session": {"mode": "gaming", "transport": transport, "resume_after_event_seq": resume} | ({"via": via} if via else {}) | (session_extra or {}),
             },
+            strict=not session_extra,
         )
         return await self.recv()
 

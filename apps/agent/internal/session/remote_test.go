@@ -176,3 +176,15 @@ func TestReturnsToLocalAfterThreeGoodProbes(t *testing.T) {
 		t.Fatalf("hellos %+v", h)
 	}
 }
+
+// A welcome from a newer HA with fields this version does not know must be
+// accepted (lenient receiver). Found on the G15: 0.3.0-dev.1 rejected
+// integration 0.4.0's connection_profile and could never connect.
+func TestWelcomeFromNewerHAIsAccepted(t *testing.T) {
+	r := newRig(t)
+	r.srv.WelcomeExtra = map[string]any{"future_field": map[string]any{"x": 1}}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = r.cli.Run(ctx) }()
+	waitFor(t, "connected", func() bool { return r.cli.Status().State == "connected_local" })
+}
