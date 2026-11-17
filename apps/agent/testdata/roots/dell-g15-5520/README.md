@@ -1,0 +1,1 @@
+RECORDED (redacted) from the project's Dell G15 5520 on SteamOS 3.9.5, Desktop Mode, 2026-11-17 capture (docs/research/evidence/G15-capture-2026-11-17.md). Only files the collectors read are reproduced; values are exactly as captured. nvidia-smi output in tests is the captured line "21, 49.62".

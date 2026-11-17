@@ -55,3 +55,24 @@ func TestStatusUnpaired(t *testing.T) {
 		t.Fatalf("status %v", s)
 	}
 }
+
+func TestProbeRecordedG15(t *testing.T) {
+	t.Setenv("DECKBEACON_LOGIND_ADDRESS", "none")
+	t.Setenv("DECKBEACON_STATE_DIR", t.TempDir())
+	root, _ := filepath.Abs("../../testdata/roots/dell-g15-5520")
+	var out, errb bytes.Buffer
+	if code := run([]string{"probe", "--json", "--root", root}, nil, &out, &errb); code != 0 {
+		t.Fatalf("code %d: %s", code, errb.String())
+	}
+	var p struct {
+		Device       map[string]any   `json:"device"`
+		Metrics      []map[string]any `json:"metrics"`
+		Capabilities []map[string]any `json:"capabilities"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Device["model"] != "Dell G15 5520" || len(p.Metrics) < 8 || len(p.Capabilities) < 10 {
+		t.Fatalf("probe %+v", p.Device)
+	}
+}

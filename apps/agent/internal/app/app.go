@@ -294,3 +294,44 @@ func Service(ctx context.Context, e Env, action string, atBoot, force, asJSON bo
 	}
 	return err
 }
+
+// Probe prints what the agent would report, without pairing or changing anything:
+// device identity, two telemetry samples (so CPU usage has a delta) and capabilities.
+func Probe(ctx context.Context, e Env, asJSON bool) error {
+	osr, err := collect.RequireSteamOS(e.Host)
+	if err != nil {
+		return err
+	}
+	sys := collect.NewSystem(e.Host)
+	sys.Collect(ctx)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(time.Second):
+	}
+	metrics := sys.Collect(ctx)
+	lc, lcCaps, stop := startLifecycle(ctx, e.Log)
+	_ = lc
+	stop()
+	svc, _ := serviceManager(e)
+	caps := append(sys.Capabilities(ctx), lifecycleCapabilities(lcCaps, svc)...)
+	out := map[string]any{"device": deviceInfo(e.Host, osr), "boot_id_ok": len(bootID(e.Host)) == 32, "metrics": metrics, "capabilities": caps}
+	if asJSON {
+		enc := json.NewEncoder(e.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(out)
+	}
+	fmt.Fprintf(e.Stdout, "device: %v\n\nmetrics:\n", out["device"])
+	for _, m := range metrics {
+		v := fmt.Sprint(m.Value)
+		if m.Value == nil {
+			v = "unavailable (" + m.Reason + ")"
+		}
+		fmt.Fprintf(e.Stdout, "  %-26s %-14s %-4s [%s]\n", m.Key, v, m.Unit, m.Source)
+	}
+	fmt.Fprintln(e.Stdout, "\ncapabilities:")
+	for _, c := range caps {
+		fmt.Fprintf(e.Stdout, "  %-26s %-12s %s\n", c.ID, c.Status, c.Reason)
+	}
+	return nil
+}

@@ -110,3 +110,22 @@ Living document. Each row moves forward only with recorded evidence (test ID, St
 | Approval from HA | `UpdateEntity` install | — | no | source | available | M9 |
 | A/B slot switch + rollback | user-owned slots + separate updater unit | none | no | design | available | M9 |
 | Game-session deferral | current-game detector | none | no | design | available | M9 |
+
+## Evidence log: Dell G15 5520, SteamOS 3.9.5 (`rel`), read-only capture 2026-11-17
+Source: [`evidence/G15-capture-2026-11-17.md`](evidence/G15-capture-2026-11-17.md). The paths and values were **observed on the device**. The agent's parsing of them is verified against the recorded fixture `apps/agent/testdata/roots/dell-g15-5520`. The agent binary itself has **not yet run** on the G15.
+
+| Capability | Observation | Effect |
+|---|---|---|
+| Model identification | DMI `Dell Inc.` / `Dell G15 5520`. os-release says `VARIANT_ID=steamdeck` and the kernel is `neptune` even here. | Confirms DMI-based identity. os-release must never identify hardware. |
+| CPU temperature | `coretemp` "Package id 0" (plus per-core). `alienware_wmi`/`dell_ddv`/`dell_smm` duplicate the CPU/fan data. | Collector picks coretemp. hwmon indices are dynamic, so matching is by name. |
+| GPU utilisation/temp (NVIDIA) | Hybrid i915 + RTX 3050 Mobile, proprietary driver. No `gpu_busy_percent`. `nvidia-smi` → `21, 49.62` (**decimal temperature**). | **Bug found and fixed:** the integer parser made both metrics unavailable. A fallback to the hwmon sensor labelled `GPU` was added. |
+| Fans | 2 fans via 3 drivers, all 0 RPM at light load. | Reported as 0. Whether fans are stopped or misreport is unknown; re-check under load. |
+| Battery | `BAT0`, `CHARGE_*` (µAh) with no `ENERGY_*`, duplicate `TYPE` key, `HEALTH=Good` despite 41 % capacity. | Agent reads capacity/status/current×voltage only. Firmware health is not reported. |
+| Session mode | Desktop Mode: `kwin_wayland` + `plasmashell`, no gamescope. | Heuristic matches. Gaming Mode still to observe. |
+| Start at boot (linger) | Vendor polkit `set-self-linger` = yes/yes/yes. `/etc/polkit-1/rules.d` unreadable without root. Linger currently off. | HV-S1 policy precondition met. An actual enable test is still pending. |
+| Sleep delay inhibitor | `inhibit-delay-sleep` = yes/yes/yes. `InhibitDelayMaxSec` default 5 s. Other user delay inhibitors (kwin, cecd) present. | Agent's 4 s cap is within limits. HV-P3 timing still pending. |
+| Power commands | `suspend`: allow_active=yes, inactive/any=auth_admin_keep. | Matches the M0 analysis (works from an active session only). |
+| logind / user systemd | logind reachable on the system bus. `systemctl --user` running, user units already in use. | Service model viable. |
+| mDNS | `avahi-daemon` active. | Agent's legacy-unicast browse coexists. Untested live. |
+| Steam library | 1 library, 37 manifests (tools/runtimes included). `BytesToDownload`/`BytesDownloaded` optional. Proton 9 Beta / 11 / Experimental. librarycache per-app directories. | Inputs for M6. |
+| Filesystem | Single btrfs subvolume (not the Steam Deck A/B layout). | HV-S2 (update survival) must be run separately for Deck and G15. |

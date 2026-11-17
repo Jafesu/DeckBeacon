@@ -251,6 +251,24 @@ func (s *System) temp(h hwmon, preferLabels ...string) (float64, bool) {
 	return best, found
 }
 
+// labelled returns the temperature of the sensor in h whose label is exactly want.
+func (s *System) labelled(h hwmon, want string) (float64, bool) {
+	for _, f := range s.env.glob(h.dir + "/temp*_label") {
+		if l, _ := s.env.read(f); l == want {
+			raw, err := s.env.read(strings.TrimSuffix(f, "_label") + "_input")
+			if err != nil {
+				return 0, false
+			}
+			v, err := strconv.ParseFloat(raw, 64)
+			if err != nil {
+				return 0, false
+			}
+			return v / 1000, true
+		}
+	}
+	return 0, false
+}
+
 func (s *System) thermal(ctx context.Context, now time.Time) []Metric {
 	var out []Metric
 	mons := s.hwmons()
@@ -303,6 +321,15 @@ func (s *System) thermal(ctx context.Context, now time.Time) []Metric {
 		out = append(out, Metric{Key: "gpu.busy", Value: nil, Unit: "%", SampledAt: now, Source: "none", Reason: "no supported GPU utilisation source (amdgpu sysfs or nvidia-smi)"})
 	}
 	if !gpuDone {
+		for _, h := range mons {
+			if c, ok := s.labelled(h, "GPU"); ok {
+				out = append(out, Metric{Key: "thermal.gpu_c", Value: round1(c), Unit: "°C", SampledAt: now, Source: "hwmon " + h.name + " (GPU label)", Confidence: "high"})
+				gpuDone = true
+				break
+			}
+		}
+	}
+	if !gpuDone {
 		out = append(out, Metric{Key: "thermal.gpu_c", Value: nil, Unit: "°C", SampledAt: now, Source: "none", Reason: "no GPU temperature source"})
 	}
 	if !cpuDone {
@@ -311,7 +338,7 @@ func (s *System) thermal(ctx context.Context, now time.Time) []Metric {
 	return out
 }
 
-func (s *System) nvidia(ctx context.Context) (util, temp int, ok bool) {
+func (s *System) nvidia(ctx context.Context) (util int, temp float64, ok bool) {
 	if s.env.LookPath == nil || s.env.Run == nil {
 		return 0, 0, false
 	}
@@ -328,12 +355,13 @@ func (s *System) nvidia(ctx context.Context) (util, temp int, ok bool) {
 	if len(parts) != 2 {
 		return 0, 0, false
 	}
-	u, e1 := strconv.Atoi(strings.TrimSpace(parts[0]))
-	t, e2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+	// Recorded on a Dell G15 (driver 2026): temperature prints with decimals ("49.62").
+	u, e1 := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+	t, e2 := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
 	if e1 != nil || e2 != nil {
 		return 0, 0, false
 	}
-	return u, t, true
+	return int(math.Round(u)), round1(t), true
 }
 
 // SessionMode detects Gaming vs Desktop mode from running processes (heuristic).

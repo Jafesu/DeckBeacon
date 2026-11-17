@@ -27,6 +27,7 @@ commands:
   pair     [--url URL] [--name NAME]   pair with Home Assistant (shows a code to confirm)
   run      [--telemetry-interval 30s]  run the agent (normally via systemd --user)
   status   [--json]                    show identity, pairing and connection state
+  probe    [--json]                    show what this device would report (read-only, no pairing)
   unpair                               forget the local pairing
   service  install [--at-boot] | uninstall | status [--json] | boot on|off [--force]
                                        manage the systemd --user service (no sudo)
@@ -55,7 +56,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	case "run":
 		interval = fs.Duration("telemetry-interval", 30*time.Second, "telemetry period")
 		logLevel = fs.String("log-level", "info", "debug|info|warn|error")
-	case "status", "version":
+	case "status", "version", "probe":
 		jsonOut = fs.Bool("json", false, "machine-readable output")
 	case "unpair":
 	case "service":
@@ -104,6 +105,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	case "status":
 		err = app.Status(e, *jsonOut)
+	case "probe":
+		err = app.Probe(ctx, e, *jsonOut)
 	case "unpair":
 		err = app.Unpair(e)
 	case "service":

@@ -109,7 +109,7 @@ func TestDellG15WithNvidia(t *testing.T) {
 	}
 	m := byKey(NewSystem(e).Collect(context.Background()))
 	want := map[string]any{
-		"thermal.cpu_c": 71.0, "fan.rpm": 2650, "gpu.busy": 37, "thermal.gpu_c": 66, "battery.level": 100,
+		"thermal.cpu_c": 71.0, "fan.rpm": 2650, "gpu.busy": 37, "thermal.gpu_c": 66.0, "battery.level": 100,
 		"battery.status": "full", "battery.power_w": 0.0, "power.ac_online": true, "session.mode": "desktop",
 		"memory.used_percent": 75.0,
 	}
@@ -160,5 +160,37 @@ func TestEmptyRootDegradesGracefully(t *testing.T) {
 	}
 	if m["thermal.cpu_c"].Value != nil || m["session.mode"].Value != "none" {
 		t.Fatalf("unexpected %+v %+v", m["thermal.cpu_c"], m["session.mode"])
+	}
+}
+
+// TestDellG15RecordedCapture uses values recorded on the real G15 (2026-11-17).
+func TestDellG15RecordedCapture(t *testing.T) {
+	e := testEnv(t, "dell-g15-5520", "21, 49.62\n")
+	if info := ReadDeviceInfo(e); info.Model != "Dell G15 5520" || info.Vendor != "Dell Inc." {
+		t.Fatalf("info %+v (os-release says VARIANT_ID=steamdeck; DMI must win)", info)
+	}
+	m := byKey(NewSystem(e).Collect(context.Background()))
+	want := map[string]any{
+		"thermal.cpu_c": 59.0, "gpu.busy": 21, "thermal.gpu_c": 49.6, "fan.rpm": 0, "battery.level": 100,
+		"battery.status": "full", "battery.power_w": 0.0, "power.ac_online": true, "session.mode": "desktop",
+		"memory.used_percent": 24.7, "system.boot_time": "2026-11-17T00:40:42Z",
+	}
+	for k, v := range want {
+		if m[k].Value != v {
+			t.Errorf("%s = %v (%T), want %v (%T) [source %s]", k, m[k].Value, m[k].Value, v, v, m[k].Source)
+		}
+	}
+	if m["gpu.busy"].Source != "nvidia-smi" {
+		t.Errorf("gpu source %s", m["gpu.busy"].Source)
+	}
+}
+
+func TestG15WithoutNvidiaToolFallsBackToLabelledGPUSensor(t *testing.T) {
+	m := byKey(NewSystem(testEnv(t, "dell-g15-5520", "")).Collect(context.Background()))
+	if m["thermal.gpu_c"].Value != 49.0 || m["thermal.gpu_c"].Confidence != "high" {
+		t.Fatalf("gpu temp %+v", m["thermal.gpu_c"])
+	}
+	if m["gpu.busy"].Value != nil {
+		t.Fatalf("gpu.busy must be unavailable without nvidia-smi, got %+v", m["gpu.busy"])
 	}
 }
