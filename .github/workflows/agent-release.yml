@@ -6,6 +6,11 @@ on:
     branches: [main]
     paths: [apps/agent/VERSION]
   workflow_dispatch:
+    inputs:
+      unhealthy:
+        description: "Build a deliberately broken -dev release (rollback test only)"
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency:
@@ -32,6 +37,7 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         env:
           DECKBEACON_RELEASE_KEY: ${{ secrets.DECKBEACON_RELEASE_KEY }}
+          UNHEALTHY: ${{ inputs.unhealthy && '1' || '' }}
         run: |
           if [ -z "$DECKBEACON_RELEASE_KEY" ]; then echo "::error::DECKBEACON_RELEASE_KEY secret missing: refusing to publish unsigned"; exit 1; fi
           scripts/build_agent_release.sh dist

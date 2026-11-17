@@ -15,6 +15,11 @@ import (
 var (
 	Version = "0.0.0-dev"
 	Commit  = "unknown"
+	// Unhealthy = "1" builds a deliberately broken agent for the M9 rollback
+	// test: `run` exits immediately (`version` still works, so it passes the
+	// pre-switch checks and fails the health check). Only ever set for -dev
+	// releases by the release workflow's explicit `unhealthy` input.
+	Unhealthy = ""
 )
 
 // Info is the machine-readable build description.

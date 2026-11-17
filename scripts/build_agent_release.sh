@@ -14,9 +14,14 @@ version="$(tr -d '[:space:]' < "$root/apps/agent/VERSION")"
 commit="$(git -C "$root" rev-parse --short HEAD)"
 min_integration="$(tr -d '[:space:]' < "$root/apps/agent/MIN_INTEGRATION")"
 pkg=github.com/jafesu/deckbeacon/apps/agent/internal/buildinfo
+extra=""
+if [ "${UNHEALTHY:-}" = "1" ]; then
+  case "$version" in *-dev.*) extra="-X $pkg.Unhealthy=1"; echo "building a deliberately UNHEALTHY test release (rollback test)";;
+    *) echo "refusing: UNHEALTHY builds are only allowed for -dev versions"; exit 1;; esac
+fi
 for arch in amd64 arm64; do
   (cd "$root/apps/agent" && CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
-    -ldflags "-s -w -X $pkg.Version=$version -X $pkg.Commit=$commit" \
+    -ldflags "-s -w -X $pkg.Version=$version -X $pkg.Commit=$commit $extra" \
     -o "$out/deckbeacon-linux-$arch" ./cmd/deckbeacon)
 done
 tool="$out/deckbeacon-linux-$(go env GOARCH)"

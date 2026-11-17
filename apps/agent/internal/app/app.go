@@ -146,6 +146,9 @@ func semver(v string) string {
 
 // Run is the long-running service.
 func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
+	if buildinfo.Unhealthy == "1" {
+		return errors.New("deliberately unhealthy test build (M9 rollback test): exiting")
+	}
 	osr, err := collect.RequireSteamOS(e.Host)
 	if err != nil {
 		return err

@@ -22,3 +22,20 @@ Status: **In progress** (started 2026-11-17; owner: "let's start on m9"; the G15
 - AC6 The release workflow publishes signed artifacts only, and the agent verifies them with the embedded key (CI dry run + first real release).
 - AC7 No privilege escalation: no sudo/root, user units only (CI grep, existing).
 - AC8 CI green.
+
+## Progress (2026-11-17, G15 in transit)
+| AC | Status | Evidence |
+|---|---|---|
+| AC1 refusals | **pass (software)** | `internal/release` tests: tampered manifest, unknown key, wrong signer, missing or garbage signature, no keys, channel/version mismatch. `internal/update`: newest tampered and incompatible releases are skipped, a tampered binary is never staged (approval cleared, event emitted). |
+| AC2 approval | **pass (software)** | Exact-version approval only, `confirmed_by_user` required (agent and schema), persisted across restarts, 7-day expiry. A version that failed is never retried automatically. |
+| AC3 safe window | **pass (software)**, G15 pending | Waits with the reason ("Stardew Valley is running", "Steam is downloading …"), proceeds when idle. |
+| AC4 switch and rollback | **pass (software)**, G15 pending | Updater tests with the real layout and simulated restarts: adopt + switch + unit rewrite, crash → rollback, no reconnect → rollback, offline device needs no reconnect. The identity directories are untouched by design. |
+| AC5 HA | **pass** | Update entity, Install with confirmation, progress/detail, local/remote permission, channel in the welcome policy. 53 tests on HA 2026.5.1 + 2026.10.4. Integration 0.3.0 published to the Marketplace. |
+| AC6 signed pipeline | **pass** | With the owner's key (secret + embedded public key), the workflow published `agent/v0.3.0-dev.1` (pre-release). The first run caught a relative-path bug in the build script, which is fixed and now covered by the CI dry run. A dev build querying the real GitHub API offers 0.3.0-dev.1 on the dev channel, verified with the embedded key, and stays "up to date" on stable. The downloaded binary verifies and reports its version. |
+| AC7 no privilege | **pass** | `systemd-run --user`, `systemctl --user` only. CI grep. |
+
+## Hardware validation procedure (when the G15 is back)
+1. **Bootstrap (one time, approval needed):** build the agent from this branch on the G15 (RC session) so it contains the update client. It still runs as a from-source `0.0.0-dev`.
+2. **HA:** set the update channel to `dev`. The Agent update entity offers **0.3.0-dev.1**. Press Install. Expect: waits while a game is running, then adopt + switch, the new version reconnects, the entity shows 0.3.0-dev.1 installed, `deckbeacon update status` shows active 0.3.0-dev.1 / previous 0.0.0-dev, pairing intact.
+3. **Forced rollback:** run the release workflow with `unhealthy: true` after bumping to `0.3.0-dev.2`. Install it from HA. Expect: switch, the health check fails within 2 minutes, automatic rollback to 0.3.0-dev.1, and an "agent_update_failed (rolled_back)" event with the reason.
+4. **Healthy update:** publish `0.3.0-dev.3`, install, expect success. Then publish stable `0.3.0` from `main` when M9 merges, and switch the channel back to `stable`.
