@@ -57,7 +57,6 @@ type Provider struct {
 	lib      *steam.Library
 	revision uint64
 	tracker  *steam.Tracker
-	rate     steam.DownloadRate
 	events   chan Event
 	prevStat map[uint32]string
 	scanErr  error
@@ -339,7 +338,6 @@ func (p *Provider) Metrics() []collect.Metric {
 		for _, k := range []string{"downloads.app_id", "downloads.name", "downloads.progress", "downloads.rate_bps", "downloads.eta_s"} {
 			out = append(out, m(k, nil, "", "no download in progress"))
 		}
-		p.rate = steam.DownloadRate{}
 		return out
 	}
 	if live != nil {
@@ -352,14 +350,11 @@ func (p *Provider) Metrics() []collect.Metric {
 	} else {
 		out = append(out, m("downloads.progress", nil, "%", "size not known yet"))
 	}
-	rate := p.rate.Sample(dl.AppID, dl.BytesDownloaded, now)
-	if rate > 0 {
-		out = append(out, m("downloads.rate_bps", int64(rate), "B/s", ""))
-		remaining := float64(dl.BytesToDownload - min(dl.BytesDownloaded, dl.BytesToDownload))
-		out = append(out, m("downloads.eta_s", int64(remaining/rate), "s", ""))
-	} else {
-		out = append(out, m("downloads.rate_bps", nil, "B/s", "measuring"), m("downloads.eta_s", nil, "s", "measuring"))
-	}
+	// The manifest is written only at events (G15 §13), so byte deltas between
+	// writes are not a rate: an earlier version showed 0.02 MB/s and a 29-day
+	// ETA on the G15. Without the live tracker, speed and ETA are unknown.
+	reason := "no live download data (Steam log not readable)"
+	out = append(out, m("downloads.rate_bps", nil, "B/s", reason), m("downloads.eta_s", nil, "s", reason))
 	return out
 }
 

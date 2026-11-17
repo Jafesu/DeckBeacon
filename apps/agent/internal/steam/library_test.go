@@ -114,15 +114,3 @@ func TestRunningAppsAndTracker(t *testing.T) {
 		t.Fatal("no current session expected")
 	}
 }
-
-func TestDownloadRate(t *testing.T) {
-	var d DownloadRate
-	t0 := time.Now()
-	d.Sample(1, 0, t0)
-	if r := d.Sample(1, 10_000_000, t0.Add(10*time.Second)); r != 1_000_000 {
-		t.Fatalf("rate %v", r)
-	}
-	if r := d.Sample(2, 5, t0.Add(11*time.Second)); r != 0 {
-		t.Fatal("switching app must reset the rate")
-	}
-}

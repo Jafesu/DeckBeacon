@@ -78,30 +78,3 @@ func (t *Tracker) Current() *Session {
 	}
 	return best
 }
-
-// DownloadRate estimates bytes/s for one app from successive samples.
-type DownloadRate struct {
-	app   uint32
-	bytes uint64
-	at    time.Time
-	rate  float64
-}
-
-// Sample updates the rate with the latest downloaded byte count.
-func (d *DownloadRate) Sample(app uint32, downloaded uint64, now time.Time) float64 {
-	if app != d.app || downloaded < d.bytes || d.at.IsZero() {
-		d.app, d.bytes, d.at, d.rate = app, downloaded, now, 0
-		return 0
-	}
-	dt := now.Sub(d.at).Seconds()
-	if dt >= 1 {
-		inst := float64(downloaded-d.bytes) / dt
-		if d.rate == 0 {
-			d.rate = inst
-		} else {
-			d.rate = 0.6*d.rate + 0.4*inst // smooth jitter of Steam's periodic manifest writes
-		}
-		d.bytes, d.at = downloaded, now
-	}
-	return d.rate
-}

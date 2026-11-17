@@ -37,3 +37,6 @@ G15 discovery (`docs/research/evidence/G15-m6-discovery-2026-11-17.md`). A unit 
 - **Payload limits:** frames over 1 MiB close the connection. Only frames up to 64 KiB are inspected. Text is sanitized: valid UTF-8, no control/format/bidi characters, at most 128 runes. Assets, URLs, buttons and secrets are ignored.
 - **Opt-in:** on the device only: `deckbeacon activity on`, written to `~/.config/deckbeacon/activity.json`. HA cannot enable it.
 - **Metrics:** `game.activity.details|state|party_size|party_max|started_at`. They are null with a reason when there is no data. When the proxy is off, the keys are never sent, so no sensors appear.
+
+## Proton games (2026-11-17): deferred
+Proton games talk to Discord over the Windows named pipe `\\.\pipe\discord-ipc-0`, which Wine doesn't connect to the Linux socket. Known bridges (wine-discord-ipc-bridge and forks) need per-game launch options, which the owner rejected. Candidate without per-game options: GE-Proton 11-1+ has an opt-in bridge (`PROTON_DISCORD_BRIDGE=1`, from proton-cachyos). That means GE-Proton as Steam's default compatibility tool plus one global environment variable. **The owner deferred this** ("put a pin in it"). Unverified on hardware: whether `environment.d` reaches Gaming Mode games, and which socket the bridge connects to.

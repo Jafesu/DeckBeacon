@@ -27,3 +27,28 @@ Spec 06 lists the areas. The roadmap says: library and sessions first, then down
 - AC6 With activity enabled and a Discord-RPC game, HA shows its `details`/`state`. Discord's own status keeps working. Without data, the sensors are `unavailable`.
 - AC8 Non-Steam shortcuts show by name (hidden ones excluded). Starting one produces a named `game_started`. No `exe`/`StartDir`/`LaunchOptions` value ever leaves the agent. Opening and closing Big Picture flips `steam.ui_mode`.
 - AC7 CI green on HA minimum and latest, plus E2E.
+
+## Results (2026-11-17)
+Environment: Go 1.26.11; HA 2026.5.1 and 2026.10.4 test harness (43 tests each); CI runs #26–#31 green. Hardware: Dell G15 5520, SteamOS 3.9.5, the owner's HA (device `livingroom_steamos`). Evidence: HA recorder history (below), [`G15-m6-discovery-2026-11-17.md`](../research/evidence/G15-m6-discovery-2026-11-17.md) §1–§13.
+
+| AC | Result | Evidence |
+|---|---|---|
+| AC1 library | **pass** | 37 manifests at discovery = 29 games + 8 tools/runtimes. The "Installed games" sensor counted 30, then 32 as the owner installed more. Tools are separated (`kind: tool`) and excluded from counts, the picker and launch. Not compared title by title against the Steam UI. |
+| AC2 sessions | **pass** | HA history: Among Us (Not playing → Among Us 20:55:53 → Not playing 20:56:23). Hollow Acre (non-Steam shortcut) is named, with session start and duration. Exactly one start and one stop event per run (unit and E2E tests). Duration uses the monotonic clock. |
+| AC3 downloads | **software pass, hardware re-check pending** | The first hardware run exposed the gap: progress stuck at 3.4%, no speed or ETA, because the manifest is not live (§13). Fixed with live tracking (ADR-0008 amendment 1). It replays the recorded GTA V log sequence (start → sub-steps → main → pause → resume → done) in tests. The removed manifest-delta rate had shown 0.02 MB/s and a 29-day ETA on the G15. Needs one live download with the rebuilt agent. |
+| AC4 launch | **pass (Steam game); shortcut launch unverified** | `deckbeacon.launch_game` from HA Developer Tools → `dispatched`, Never Sort By Color (4876650) started on the G15. Refusals (not installed, tool, not ready, malformed id, tier denied) covered by agent and HA tests. Shortcut launch via the 64-bit GameID is covered by tests only; capability `game.launch_shortcut` reports "not yet verified on hardware". |
+| AC5 credential files | **pass** | Canary `config.vdf` is never opened. Canary `Exe`/`LaunchOptions`/`tags` (shortcuts.vdf) and LAN peer/CDN/IP/path lines (content_log) never leave the parsers. |
+| AC6 activity | **pass (standalone and native)** | With `deckbeacon activity on`, a local Discord-IPC test client on the G15 (handshake, then SET_ACTIVITY) got READY from DeckBeacon. HA showed "DeckBeacon RPC test" / "Level 3 - Boss" / party max 4 at 21:38:27, back to unavailable at 21:38:43 when the client disconnected. Forwarding to a running Discord is covered by tests only. **Proton games: deferred by the owner** (they need a Wine pipe bridge; GE-Proton 11-1's opt-in `PROTON_DISCORD_BRIDGE=1` is the candidate, see ADR-0007). |
+| AC7 CI | **pass** | All M6 runs green (Go race, govulncheck, protocol, fixtures/security greps, HA min/latest + E2E, gitleaks). |
+| AC8 shortcuts, UI mode | **pass** | 8 shortcuts counted, named in the library and picker (duplicates disambiguated). Hollow Acre named while running. `steam_ui_mode` desktop → gamepad → desktop as Big Picture opened and closed (20:56:53 / 20:57:23). Session sensor shows desktop/gaming. |
+
+### Owner feedback addressed during validation
+- **10–15 s lag:** HA history showed updates only on the 30 s telemetry tick. Game metrics are now pushed on change, and the process poll went from 5 s to 2 s.
+- **Session start/duration "stayed unavailable":** same cause (one 30 s tick per short session). Fixed by the push.
+- **Rich Presence without Discord:** standalone mode (ADR-0007 amendment).
+- **Launch from the dashboard:** "Game to launch" select + "Launch game" button. A DeckBeacon view was added to the owner's experimentation dashboard (with approval).
+
+### Open (carried forward)
+- One live download with the rebuilt agent (AC3), and one shortcut launch from HA (AC4).
+- §13 open items: completion of a large download, cancel mid-download, a download in Gaming Mode.
+- Proton Rich Presence (deferred by the owner).
