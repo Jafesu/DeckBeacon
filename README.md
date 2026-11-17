@@ -1,8 +1,10 @@
+<p align="center"><img src="docs/brand/png/readme-banner.png" alt="DeckBeacon" width="600"></p>
+
 # DeckBeacon
 
 SteamOS-only, local-first monitoring and management companion for Home Assistant.
 
-**Status:** M0 (research and feasibility) approved. **M2 (local MVP) complete:** the Go agent pairs with Home Assistant (SAS-confirmed Noise channel) and reports system telemetry as native entities. M3 adds `deckbeacon service install [--at-boot]` (no sudo) and sleep/resume/shutdown/boot announcements with a separate power-state sensor. Not yet validated on real SteamOS hardware. No end-user functionality yet.
+**Status:** M0–M3 and M6 complete and validated on real SteamOS hardware (Dell G15). The Go agent pairs with Home Assistant over a SAS-confirmed Noise channel and reports system telemetry, power state, the Steam library (games and non-Steam shortcuts), current game and sessions, live downloads, Steam UI mode and optional Discord Rich Presence activity. Games can be launched from HA. **M8 (dashboard cards and game artwork) in progress.** Pre-release: no packaged install yet.
 
 - Specification: [`docs/specification/`](docs/specification/) (v1.0, authoritative), [`CLAUDE.md`](CLAUDE.md), [`AGENTS.md`](AGENTS.md)
 - Feasibility report: [`docs/research/M0-feasibility-report.md`](docs/research/M0-feasibility-report.md)

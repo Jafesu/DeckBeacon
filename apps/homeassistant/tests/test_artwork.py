@@ -144,3 +144,13 @@ async def test_now_playing_image_entity(hass: HomeAssistant, client, hass_client
     resp = await auth.get(f"/api/image_proxy/{eid}")
     await task
     assert resp.status == 200 and await resp.read() == JPEG
+
+
+async def test_integration_brand_icon_served_locally(hass: HomeAssistant, client, hass_client) -> None:
+    """HA's brands component serves custom_components/deckbeacon/brand/ first (2026.5+)."""
+    assert "brands" in hass.config.components
+    auth = await hass_client()
+    for image in ("icon.png", "logo@2x.png", "dark_icon.png"):
+        resp = await auth.get(f"/api/brands/integration/{DOMAIN}/{image}?placeholder=no")
+        assert resp.status == 200, image
+        assert (await resp.read())[:8] == b"\x89PNG\r\n\x1a\n"

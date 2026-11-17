@@ -23,5 +23,6 @@ async def client(hass, hass_client_no_auth):
     # server freezes the router (DeckBeacon depends on it for the card API).
     assert await async_setup_component(hass, "websocket_api", {})
     assert await async_setup_component(hass, "image", {})
+    assert await async_setup_component(hass, "brands", {})
     await async_get_hub(hass)
     return await hass_client_no_auth()
