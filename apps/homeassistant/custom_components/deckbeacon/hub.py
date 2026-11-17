@@ -171,6 +171,9 @@ class DeviceRuntime:
         if self.channel is channel:
             self.channel = None
             self.transport = None
+            # Never show the previous session's values as current after reconnect
+            # (spec 04); seen on the G15 as a ~130 ms flash of the old "Last boot".
+            self.metrics = {}
             # An announced power-off that is followed by the drop means "off". An
             # announced suspend/reboot stays as announced. An unannounced drop proves
             # nothing about power (Wi-Fi loss, crash, HA restart...): unknown.

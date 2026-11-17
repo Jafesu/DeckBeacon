@@ -63,3 +63,17 @@ Test counts (local): Go: all 16 agent packages + protocol pass with `-race`. Pyt
 - Self-lingering under SteamOS polkit policy: **HV-S1**. Unit survival across an A/B update: **HV-S2**.
 - Power commands (suspend/reboot from HA) are **not** part of M3. They belong to the power/admin tier (M7) and HV-P1/P2.
 - Power state is held in memory: after an HA restart it is `unknown` until the device reconnects.
+
+## Hardware validation (Dell G15 5520, SteamOS 3.9.5, 2026-11-17)
+Evidence: [`G15-sleep-test-2026-11-17.md`](../research/evidence/G15-sleep-test-2026-11-17.md), [`G15-ha-session-2026-11-17.md`](../research/evidence/G15-ha-session-2026-11-17.md).
+
+| Test | Result |
+|---|---|
+| HV-S1 start at boot (lingering, no sudo) | **PASS.** `service boot on` works without a password. The agent starts from the user manager before the graphical session and is online in HA before the Steam startup screen. |
+| HV-P3 sleep announcement, Desktop and Gaming Mode | **PASS.** `suspended` arrives before the drop in both modes (Steam's Gaming Mode suspend goes through logind). |
+| Shutdown / reboot announcement | **PASS.** `off` after a power-off, `rebooting` during a reboot (logind `PrepareForShutdownWithMetadata`, systemd 261). |
+| Offline detection after sleep | **PASS after fix:** 5 s (was 45 s). |
+
+Issues found on hardware and fixed: post-pairing hint pointed at a non-existent unit. Duplicate resume (clock heuristic + logind). Power state lost on reload. Connection stayed "local" for 45 s after sleep (NetworkManager drops Wi-Fi in parallel with the delay inhibitor). "Shutting down" never resolved. "Last boot" 1 s jitter. A stale metric flashed on reconnect. Also optional `ReadWritePaths` entries made tolerant.
+
+Still open: Steam Deck LCD/OLED runs (no device available). HV-S2 (unit survival across an A/B SteamOS update).

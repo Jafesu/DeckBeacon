@@ -204,7 +204,8 @@ async def test_go_agent_end_to_end(hass: HomeAssistant, client, agent_bin, tmp_p
         await hass.config_entries.async_remove(deck_entry)
         await until(hass, "deck revoked", lambda: deck.status().get("state") == "revoked", timeout=30)
         assert deck.proc.returncode is None  # idle, not crash-looping
-        assert json.loads((deck.state / "trust.json").read_text())["revoked"] is True
+        # status.json flips first; trust.json is persisted right after: wait for it.
+        await until(hass, "revocation persisted", lambda: json.loads((deck.state / "trust.json").read_text()).get("revoked") is True, timeout=10)
         assert state(hass, g15_id, "connection") == "local"  # other device unaffected
 
         # No HA access token anywhere on the device (AC3).

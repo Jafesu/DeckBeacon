@@ -83,6 +83,9 @@ async def test_telemetry_creates_entities_and_staleness(hass: HomeAssistant, cli
     assert hass.states.get(ent(hass, agent.device_id, "cpu_usage")).state == STATE_UNAVAILABLE
     welcome = await agent.connect(client)
     assert welcome["type"] == "welcome"
+    await settle(hass)
+    # Connected again but no fresh sample yet: still unavailable, never the stale value.
+    assert hass.states.get(ent(hass, agent.device_id, "cpu_usage")).state == STATE_UNAVAILABLE
     await agent.telemetry([{"key": "cpu.usage", "value": 5.0}])
     await settle(hass)
     assert hass.states.get(ent(hass, agent.device_id, "cpu_usage")).state == "5.0"
