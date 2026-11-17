@@ -1,0 +1,22 @@
+{
+  "description": "approval names an exact release version",
+  "schema": "envelope",
+  "error_path": "/body/args/version",
+  "message": {
+    "v": 1,
+    "type": "command",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAV4",
+    "ts": "2026-11-17T18:00:00Z",
+    "seq": 3,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAV4A",
+      "name": "approve_agent_update",
+      "args": {
+        "version": "latest"
+      },
+      "ttl_s": 60,
+      "issued_at": "2026-11-17T18:00:00Z",
+      "confirmed_by_user": true
+    }
+  }
+}

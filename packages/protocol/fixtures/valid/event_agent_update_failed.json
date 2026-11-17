@@ -1,0 +1,24 @@
+{
+  "description": "update rolled back (1.5)",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "event",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAV2",
+    "ts": "2026-11-17T18:00:00Z",
+    "seq": 3,
+    "body": {
+      "event_id": "01JDAAAAAAAAAAAAAAAAAAAV2A",
+      "event_seq": 41,
+      "event_type": "agent_update_failed",
+      "occurred_at": "2026-11-17T18:02:00Z",
+      "live": true,
+      "data": {
+        "from": "0.3.0",
+        "to": "0.4.0",
+        "rolled_back": true,
+        "reason": "version 0.4.0 did not start within 2m0s"
+      }
+    }
+  }
+}

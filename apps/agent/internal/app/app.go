@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/jafesu/deckbeacon/apps/agent/internal/artwork"
@@ -188,10 +189,23 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 	disp.Register("refresh_library", "monitoring", prov.RefreshHandler())
 	disp.Register("get_artwork", "monitoring", artwork.New(gcfg.SteamRoot, prov.IsShortcut).Handler())
 	localPolicy := loadLocalPolicy(e)
+	var connected atomic.Bool
+	var integration atomic.Value
+	integration.Store("")
 	writeStatus := func(s session.Status) {
-		b, _ := json.MarshalIndent(s, "", "  ")
+		connected.Store(strings.HasPrefix(s.State, "connected_"))
+		// version and pid let the independent updater health-check a new
+		// version after a switch (ADR-0010 D4).
+		b, _ := json.MarshalIndent(struct {
+			session.Status
+			Version string `json:"version"`
+			PID     int    `json:"pid"`
+		}{s, buildinfo.Version, os.Getpid()}, "", "  ")
 		_ = fsutil.WriteFileAtomic(filepath.Join(e.Dirs.Runtime, "status.json"), b, 0o600)
 	}
+	upd := newUpdateClient(e, prov.Busy, connected.Load, func() string { return integration.Load().(string) })
+	go upd.Run(ctx)
+	disp.Register("approve_agent_update", "updates", upd.ApproveHandler())
 	for {
 		tr, err := trust.Load(e.Dirs.State)
 		switch {
@@ -207,7 +221,14 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 				Identity: id, Trust: tr, Store: st, Collector: sys, Dispatcher: disp, Games: prov, LocalPolicy: localPolicy,
 				Hello:             session.HelloInfo{AgentVersion: semver(buildinfo.Version), Device: deviceInfo(e.Host, osr), BootID: bootID(e.Host), Mode: func() string { m, _ := sys.SessionMode(); return m }},
 				TelemetryInterval: telemetryInterval, Log: e.Log, OnStatus: writeStatus,
-				Lifecycle: lc, ExtraCapabilities: func() []collect.Capability { return append(lifecycleCapabilities(lcCaps, svc), prov.Capabilities()...) },
+				Lifecycle: lc, ExtraCapabilities: func() []collect.Capability {
+					return append(append(lifecycleCapabilities(lcCaps, svc), prov.Capabilities()...), upd.Capabilities()...)
+				},
+				ExtraMetrics: upd.Metrics,
+				OnWelcome: func(integrationVersion, channel string) {
+					integration.Store(integrationVersion)
+					upd.SetChannel(channel)
+				},
 			})
 			if err != nil {
 				return err
@@ -219,6 +240,8 @@ func Run(ctx context.Context, e Env, telemetryInterval time.Duration) error {
 					case <-evCtx.Done():
 						return
 					case ev := <-prov.Events():
+						cli.AppendEvent(ev.Type, ev.Data)
+					case ev := <-upd.Events():
 						cli.AppendEvent(ev.Type, ev.Data)
 					}
 				}

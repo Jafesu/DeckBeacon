@@ -1,0 +1,21 @@
+{
+  "description": "approve an agent update (1.5)",
+  "schema": "envelope",
+  "message": {
+    "v": 1,
+    "type": "command",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAV1",
+    "ts": "2026-11-17T18:00:00Z",
+    "seq": 3,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAV1A",
+      "name": "approve_agent_update",
+      "args": {
+        "version": "0.3.0"
+      },
+      "ttl_s": 86400,
+      "issued_at": "2026-11-17T18:00:00Z",
+      "confirmed_by_user": true
+    }
+  }
+}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jafesu/deckbeacon/apps/agent/internal/collect"
@@ -116,6 +117,11 @@ func serviceManager(e Env) (service.Manager, error) {
 	}
 	if p, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = p
+	}
+	// A managed install runs versions/<v>/deckbeacon through bin/deckbeacon:
+	// the unit must keep pointing at the symlink, or updates could not switch.
+	if l := installLayout(); l.Managed() && strings.HasPrefix(exe, filepath.Join(l.Dir, "versions")+string(filepath.Separator)) {
+		exe = l.Bin()
 	}
 	u, err := user.Current()
 	if err != nil {

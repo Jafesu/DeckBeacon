@@ -74,6 +74,11 @@ type Config struct {
 	Lifecycle <-chan lifecycle.Event
 	// ExtraCapabilities are appended to the collector's capabilities.
 	ExtraCapabilities func() []collect.Capability
+	// ExtraMetrics are appended to every telemetry message (e.g. agent.update.*).
+	ExtraMetrics func() []collect.Metric
+	// OnWelcome receives the connected integration's version and the policy's
+	// update channel ("" when HA does not send one).
+	OnWelcome func(integrationVersion, updateChannel string)
 	// AckWait bounds how long a sleep/shutdown is held for HA's ack (default 3 s).
 	AckWait time.Duration
 	// Games provides game telemetry and library snapshots (nil: none).
@@ -291,7 +296,8 @@ type welcomeBody struct {
 	LastReceivedEventSeq uint64 `json:"last_received_event_seq"`
 	IntegrationVersion   string `json:"integration_version"`
 	Policy               struct {
-		Granted []string `json:"granted"`
+		Granted       []string `json:"granted"`
+		UpdateChannel string   `json:"update_channel"`
 	} `json:"policy"`
 }
 
@@ -366,6 +372,9 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 		granted = c.cfg.LocalPolicy(granted)
 	}
 	c.cfg.Dispatcher.SetGranted(granted)
+	if c.cfg.OnWelcome != nil {
+		c.cfg.OnWelcome(w.IntegrationVersion, w.Policy.UpdateChannel)
+	}
 	hb := time.Duration(w.HeartbeatS) * time.Second
 	c.setStatus("connected_"+transport, transport, u.URL, "")
 	c.cfg.Log.Info("connected", "transport", transport, "integration", w.IntegrationVersion)
@@ -471,6 +480,9 @@ func (c *Client) connectOnce(ctx context.Context, u trust.URL) error {
 		ms := c.cfg.Collector.Collect(ctx)
 		if c.cfg.Games != nil {
 			ms = append(ms, c.cfg.Games.Metrics()...)
+		}
+		if c.cfg.ExtraMetrics != nil {
+			ms = append(ms, c.cfg.ExtraMetrics()...)
 		}
 		if len(ms) == 0 {
 			return nil

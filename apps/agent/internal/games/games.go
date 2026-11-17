@@ -638,6 +638,24 @@ func (p *Provider) CloseHandler() dispatch.Handler {
 	}
 }
 
+// Busy reports whether now is a bad time for an agent update (ADR-0010 D4):
+// a game is running or Steam is downloading.
+func (p *Provider) Busy() (bool, string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if s := p.tracker.Current(); s != nil {
+		name := s.Name
+		if name == "" {
+			name = "a game"
+		}
+		return true, name + " is running"
+	}
+	if g := p.downloadGame(); g != nil {
+		return true, "Steam is downloading " + g.Name
+	}
+	return false, ""
+}
+
 func (p *Provider) running(appID uint32) bool {
 	for _, r := range steam.ScanProcs(p.cfg.ProcRoot).Running {
 		if r.AppID == appID {

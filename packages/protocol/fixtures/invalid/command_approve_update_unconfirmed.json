@@ -1,0 +1,21 @@
+{
+  "description": "an update approval must carry HA-side user confirmation",
+  "schema": "envelope",
+  "error_path": "/body",
+  "message": {
+    "v": 1,
+    "type": "command",
+    "id": "01JDAAAAAAAAAAAAAAAAAAAAV3",
+    "ts": "2026-11-17T18:00:00Z",
+    "seq": 3,
+    "body": {
+      "command_id": "01JDAAAAAAAAAAAAAAAAAAAV3A",
+      "name": "approve_agent_update",
+      "args": {
+        "version": "0.3.0"
+      },
+      "ttl_s": 60,
+      "issued_at": "2026-11-17T18:00:00Z"
+    }
+  }
+}

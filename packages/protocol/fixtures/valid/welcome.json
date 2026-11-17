@@ -17,7 +17,8 @@
         "granted": [
           "monitoring",
           "notifications"
-        ]
+        ],
+        "update_channel": "stable"
       }
     }
   }

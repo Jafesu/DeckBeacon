@@ -32,6 +32,7 @@ commands:
   service  install [--at-boot] | uninstall | status [--json] | boot on|off [--force]
                                        manage the systemd --user service (no sudo)
   activity on|off|status               experimental: report Discord Rich Presence text to HA
+  update   status|check|on|off|rollback managed agent updates (install approval happens in HA)
   release  keygen|manifest|sign|verify release tooling (signing agent releases, ADR-0010)
   version  [--json]                    print build information`
 
@@ -67,7 +68,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		logLevel = fs.String("log-level", "info", "debug|info|warn|error")
 	case "status", "version", "probe":
 		jsonOut = fs.Bool("json", false, "machine-readable output")
-	case "unpair", "activity":
+	case "unpair", "activity", "update":
 	case "service":
 		atBoot = fs.Bool("at-boot", false, "also start at boot before login (systemd lingering)")
 		force = fs.Bool("force", false, "boot off: disable lingering even if DeckBeacon did not enable it")
@@ -118,6 +119,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		err = app.Probe(ctx, e, *jsonOut)
 	case "unpair":
 		err = app.Unpair(e)
+	case "update":
+		err = app.Update(ctx, e, fs.Args())
 	case "activity":
 		action := ""
 		if fs.NArg() > 0 {
