@@ -6,10 +6,9 @@ import "crypto/ed25519"
 // signed with. Rotation: ship a release that lists the old and the new key,
 // then drop the old one. The private key never enters this repository; the
 // owner keeps it and stores it as the DECKBEACON_RELEASE_KEY Actions secret.
-//
-// Empty until the owner generates the release key (ADR-0010): such a build
-// reports updates as unavailable and never installs anything.
-var trustedKeys = []string{}
+var trustedKeys = []string{
+	"Kom6NMhiRPDS7TajzChEUTAMoEUf/kbZj/k4Ut3+cEc=", // owner release key #1 (2026-11-17)
+}
 
 // TrustedKeys returns the embedded keys (invalid entries are skipped).
 func TrustedKeys() []ed25519.PublicKey {

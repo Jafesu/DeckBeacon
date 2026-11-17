@@ -1,6 +1,6 @@
 # ADR-0010: Agent managed updates (signing, approval, atomic switch, rollback)
 
-Status: Proposed (M9, 2026-11-17)
+Status: Accepted (owner, 2026-11-17: remote approval on by default, first managed release 0.3.0, 6-hourly GitHub check with `deckbeacon update off`)
 
 ## Context
 Spec 12 requires the following:
@@ -44,7 +44,7 @@ The integration and cards already update through the HA Marketplace (ADR-0005). 
 
 ### D3 Approval
 - **Install** sends `approve_agent_update {version}` (already in the protocol; TTL up to 24 h) with `confirmed_by_user`.
-- **Tier:** a separate `updates` permission tier (spec 10), enforced on the agent and not just in HA. Default: local yes, remote **yes**. Releases are signature-verified, and approving one from away from home is the point. The owner can turn remote off in the options. *(Owner decision requested.)*
+- **Tier:** a separate `updates` permission tier (spec 10), enforced on the agent and not just in HA. Default: local yes, remote **yes** (owner decision, 2026-11-17). Releases are signature-verified, and approving one from away from home is the point. The owner can turn remote off in the options.
 - **Persistence:** the approval is stored durably on the agent until applied, superseded by a newer approval, or expired after 7 days. Approving while the device sleeps (HA queues nothing, see below) means: HA sends the approval when the device next connects, as long as the user approved within the TTL. The device is never woken.
 - **Never automatic:** there is no unattended update, and no option for one in M9.
 
@@ -89,3 +89,6 @@ The integration and cards already update through the HA Marketplace (ADR-0005). 
   - approval persistence and expiry.
 - **HA tests:** the update entity and approval flow.
 - **G15 (when back):** one real update between two signed releases, plus one forced rollback (a deliberately unhealthy release candidate on the `dev` channel).
+
+## Key record
+- Owner release key #1, created 2026-11-17 by the owner (openssl). Public key, base64 raw: `Kom6NMhiRPDS7TajzChEUTAMoEUf/kbZj/k4Ut3+cEc=`. Embedded in `internal/release/keys.go`. The private key is held by the owner and stored as the `DECKBEACON_RELEASE_KEY` Actions secret only.

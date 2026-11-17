@@ -138,3 +138,16 @@ func TestOpenSSLKeysInterop(t *testing.T) {
 		t.Fatal("base64 round trip")
 	}
 }
+
+func TestEmbeddedOwnerKey(t *testing.T) {
+	keys := TrustedKeys()
+	if len(keys) != 1 || EncodePublicKey(keys[0]) != "Kom6NMhiRPDS7TajzChEUTAMoEUf/kbZj/k4Ut3+cEc=" {
+		t.Fatalf("embedded keys %v", keys)
+	}
+	// The PEM the owner shared decodes to the same key.
+	pem := "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAKom6NMhiRPDS7TajzChEUTAMoEUf/kbZj/k4Ut3+cEc=\n-----END PUBLIC KEY-----\n"
+	k, err := ParsePublicKey(pem)
+	if err != nil || !k.Equal(keys[0]) {
+		t.Fatalf("PEM mismatch: %v", err)
+	}
+}
