@@ -32,6 +32,7 @@ commands:
   service  install [--at-boot] | uninstall | status [--json] | boot on|off [--force]
                                        manage the systemd --user service (no sudo)
   activity on|off|status               experimental: report Discord Rich Presence text to HA
+  release  keygen|manifest|sign|verify release tooling (signing agent releases, ADR-0010)
   version  [--json]                    print build information`
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -40,6 +41,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 	cmd, rest := args[0], args[1:]
+	if cmd == "release" { // release tooling has its own flags and needs no agent state
+		if err := app.Release(rest, stdout, stderr); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		return 0
+	}
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	root := fs.String("root", "/", "host root for /proc, /sys, /etc (testing only)")
