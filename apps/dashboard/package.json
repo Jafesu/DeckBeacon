@@ -18,7 +18,7 @@
   "devDependencies": {
     "axe-core": "^4.14.1",
     "esbuild": "^0.25.12",
-    "happy-dom": "^18.0.1",
+    "jsdom": "^26.1.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   }

@@ -59,7 +59,8 @@ def _describe(hass: HomeAssistant, rt) -> dict[str, Any]:
         "power_state": rt.power_state,
         "entities": entities,
         # Why a metric has no value (spec 08: unavailable vs unsupported vs disabled vs unknown).
-        "reasons": {k: m["reason"] for k, m in rt.metrics.items() if m.get("value") is None and m.get("reason")},
+        # Keyed like `entities` (metric key with "." -> "_").
+        "reasons": {k.replace(".", "_"): m["reason"] for k, m in rt.metrics.items() if m.get("value") is None and m.get("reason")},
         "capabilities": [{k: c[k] for k in ("id", "status", "reason", "experimental") if k in c} for c in rt.capabilities],
         "can_launch": "game_management" in rt.granted(transport),
         "library_revision": rt.library_revision,

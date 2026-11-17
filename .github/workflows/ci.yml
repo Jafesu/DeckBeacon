@@ -124,6 +124,35 @@ jobs:
       - run: ruff format --check .
       - run: pytest -q --timeout 300
 
+  dashboard:
+    name: Dashboard cards (typecheck, unit, build, browser a11y)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/dashboard
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/dashboard/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Real-browser render + axe accessibility scan (light/dark, 390/1280 px)
+        run: |
+          npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          node test/visual/run.cjs out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-screenshots
+          path: apps/dashboard/out/
+          if-no-files-found: ignore
+
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
