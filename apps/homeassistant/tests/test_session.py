@@ -51,7 +51,7 @@ async def test_telemetry_creates_entities_and_staleness(hass: HomeAssistant, cli
     agent, entry = paired
     welcome = await agent.connect(client)
     assert welcome["type"] == "welcome"
-    assert welcome["body"]["policy"]["granted"] == ["monitoring", "game_management"]  # local default
+    assert welcome["body"]["policy"]["granted"] == ["monitoring", "game_management", "updates"]  # local defaults
     await agent.telemetry(METRICS)
     await settle(hass)
 

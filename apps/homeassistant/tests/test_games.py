@@ -99,15 +99,20 @@ async def test_launch_rejected_by_device(hass: HomeAssistant, client) -> None:
 
 async def test_remote_denied_by_default_and_options(hass: HomeAssistant, client) -> None:
     agent, entry, device_id, welcome = await setup(hass, client, transport="remote")
-    assert welcome["body"]["policy"]["granted"] == ["monitoring"]
+    assert welcome["body"]["policy"]["granted"] == ["monitoring", "updates"]  # updates: remote by default (ADR-0010)
+    assert welcome["body"]["policy"]["update_channel"] == "stable"
     with pytest.raises(ServiceValidationError, match="not allowed over the remote"):
         await hass.services.async_call(DOMAIN, "launch_game", {"device_id": device_id, "app_id": 413150}, blocking=True, return_response=True)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(result["flow_id"], {"game_management_local": True, "game_management_remote": True})
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"game_management_local": True, "game_management_remote": True, "updates_local": True, "updates_remote": False, "update_channel": "beta"},
+    )
     await settle(hass)  # options change reloads the entry; the device reconnects
     welcome = await agent.connect(client, transport="remote")
     assert welcome["body"]["policy"]["granted"] == ["monitoring", "game_management"]
+    assert welcome["body"]["policy"]["update_channel"] == "beta"
 
 
 async def test_game_and_download_sensors(hass: HomeAssistant, client) -> None:
